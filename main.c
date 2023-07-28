@@ -83,7 +83,11 @@ struct event {
 	};
 };
 
-#define BOOTLOADER_ENTRY_PIN 15
+#ifdef PICOWOTA_OTA_PIN
+#if PICOWOTA_OTA_PIN < 0 || 30 <= PICOWOTA_OTA_PIN
+#error "Invalid pin for `PICOWOTA_OTA_PIN`"
+#endif
+#endif
 
 #define TCP_PORT 4242
 
@@ -556,10 +560,13 @@ struct comm_command reboot_cmd = {
 
 static bool should_stay_in_bootloader()
 {
+#ifdef PICOWOTA_OTA_PIN
+	if (!gpio_get(PICOWOTA_OTA_PIN)) return true;
+#endif
+
 	bool wd_says_so = (watchdog_hw->scratch[5] == PICOWOTA_BOOTLOADER_ENTRY_MAGIC) &&
 		(watchdog_hw->scratch[6] == ~PICOWOTA_BOOTLOADER_ENTRY_MAGIC);
-
-	return !gpio_get(BOOTLOADER_ENTRY_PIN) || wd_says_so;
+	return wd_says_so;
 }
 
 static void network_deinit()
@@ -574,9 +581,11 @@ int main()
 {
 	err_t err;
 
-	gpio_init(BOOTLOADER_ENTRY_PIN);
-	gpio_pull_up(BOOTLOADER_ENTRY_PIN);
-	gpio_set_dir(BOOTLOADER_ENTRY_PIN, 0);
+#ifdef PICOWOTA_OTA_PIN
+	gpio_init(PICOWOTA_OTA_PIN);
+	gpio_pull_up(PICOWOTA_OTA_PIN);
+	gpio_set_dir(PICOWOTA_OTA_PIN, 0);
+#endif
 
 	sleep_ms(10);
 

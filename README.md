@@ -35,12 +35,13 @@ as CMake variables:
 PICOWOTA_WIFI_SSID # The WiFi network SSID
 PICOWOTA_WIFI_PASS # The WiFi network password
 PICOWOTA_WIFI_AP # Optional; 0 = connect to the network, 1 = create it
+PICOWOTA_OTA_PIN # Optional; if set, pulling this pin low at boot time will stay in OTA mode
 ```
 
 Then, you can either build just your standalone app binary (suitable for
 updating via `picowota` when it's already on the Pico), or a combined binary
 which contains the bootloader and the app (suitable for flashing the first
-time): 
+time):
 
 ```
 picowota_build_standalone(my_executable_name)
@@ -50,8 +51,8 @@ picowota_build_combined(my_executable_name)
 Note: The combined target will also build the standalone binary.
 
 To be able to update your app, you must provide a way to return to the
-bootloader. By default, if GPIO15 is pulled low at boot time, then `picowota`
-will stay in bootloader mode, ready to receive new app code.
+bootloader. If `PICOWOTA_OTA_PIN` is defined and that GPIO is pulled low at boot
+time, then `picowota` will stay in bootloader mode, ready to receive new app code.
 
 You can also return to the bootloader from your app code - for example when a
 button is pressed, or in response to some network request. The

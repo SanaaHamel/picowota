@@ -93,6 +93,7 @@ endfunction()
 picowota_retrieve_variable(PICOWOTA_WIFI_SSID false)
 picowota_retrieve_variable(PICOWOTA_WIFI_PASS true)
 picowota_retrieve_variable(PICOWOTA_WIFI_AP false)
+picowota_retrieve_variable(PICOWOTA_OTA_PIN false)
 
 if ((NOT PICOWOTA_WIFI_SSID) OR (NOT PICOWOTA_WIFI_PASS))
         message(FATAL_ERROR
@@ -104,6 +105,9 @@ endif ()
 # be better.
 target_compile_definitions(picowota PUBLIC PICOWOTA_WIFI_SSID=${PICOWOTA_WIFI_SSID})
 target_compile_definitions(picowota PUBLIC PICOWOTA_WIFI_PASS=${PICOWOTA_WIFI_PASS})
+if (DEFINED PICOWOTA_OTA_PIN)
+	target_compile_definitions(picowota PUBLIC PICOWOTA_OTA_PIN=${PICOWOTA_OTA_PIN})
+endif()
 
 # Use the WiFi AP mode upon request
 if (PICOWOTA_WIFI_AP)
