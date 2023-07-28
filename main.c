@@ -613,12 +613,12 @@ int main()
 	cyw43_arch_enable_sta_mode();
 
 	DBG_PRINTF("Connecting to WiFi...\n");
-	if (cyw43_arch_wifi_connect_timeout_ms(wifi_ssid, wifi_pass, CYW43_AUTH_WPA2_AES_PSK, 30000)) {
-		DBG_PRINTF("failed to connect.\n");
-		return 1;
-	} else {
-		DBG_PRINTF("Connected.\n");
+	while (cyw43_arch_wifi_connect_timeout_ms(wifi_ssid, wifi_pass, CYW43_AUTH_WPA2_AES_PSK, 30000)) {
+		DBG_PRINTF("failed to connect - retrying...\n");
+		sleep_ms(500);
 	}
+
+	DBG_PRINTF("Connected.\n");
 #endif
 
 	critical_section_init(&critical_section);
