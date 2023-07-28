@@ -15,7 +15,7 @@ extern "C" {
 
 #define PICOWOTA_BOOTLOADER_ENTRY_MAGIC 0xb105f00d
 
-void picowota_reboot(bool to_bootloader);
+__attribute__((noreturn)) void picowota_reboot(bool to_bootloader);
 
 #ifdef __cplusplus
 }
