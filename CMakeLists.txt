@@ -148,7 +148,7 @@ function(picowota_build_combined NAME)
 	pico_set_linker_script(picowota ${PICOWOTA_SRC_DIR}/bootloader_shell.ld)
 
 	# TODO: The hard-coded address here is a bit nasty
-	add_custom_target(${NAME}_hdr DEPENDS ${APP_BIN})
+	add_custom_target(${NAME}_hdr DEPENDS ${NAME})
 	add_custom_command(TARGET ${NAME}_hdr DEPENDS ${APP_BIN}
 		COMMAND ${PICOWOTA_SRC_DIR}/gen_imghdr.py -a 0x1005B000 ${APP_BIN} ${APP_HDR_BIN}
 	)
