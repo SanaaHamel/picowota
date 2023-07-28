@@ -31,6 +31,10 @@ project(picowota C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
+if (NOT DEFINED PICO_BOARD)
+	set(PICO_BOARD pico_w)
+endif()
+
 pico_sdk_init()
 
 add_executable(picowota
