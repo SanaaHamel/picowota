@@ -6,13 +6,13 @@
 # following conditions are met:
 #
 # 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
-#    disclaimer.
+# disclaimer.
 #
 # 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
-#    disclaimer in the documentation and/or other materials provided with the distribution.
+# disclaimer in the documentation and/or other materials provided with the distribution.
 #
 # 3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products
-#    derived from this software without specific prior written permission.
+# derived from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
 # INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -31,7 +31,7 @@ project(picowota C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
-if (NOT DEFINED PICO_BOARD)
+if(NOT DEFINED PICO_BOARD)
 	set(PICO_BOARD pico_w)
 endif()
 
@@ -44,8 +44,8 @@ add_executable(picowota
 )
 
 function(target_cl_options option)
-    target_compile_options(picowota PRIVATE ${option})
-    target_link_options(picowota PRIVATE ${option})
+	target_compile_options(picowota PRIVATE ${option})
+	target_link_options(picowota PRIVATE ${option})
 endfunction()
 
 target_cl_options("-Wall")
@@ -79,13 +79,15 @@ target_link_libraries(picowota
 
 # Retrieves build variables from the environment if present
 function(picowota_retrieve_variable name hidden)
-	if (DEFINED ENV{${name}} AND (NOT ${name}))
+	if(DEFINED ENV{${name}} AND(NOT ${name}))
 		set(${name} $ENV{${name}} PARENT_SCOPE)
-		if (hidden)
+
+		if(hidden)
 			set(log_value "hidden")
 		else()
 			set(log_value "'$ENV{${name}}'")
 		endif()
+
 		message("Using ${name} from environment (${log_value})")
 	endif()
 endfunction()
@@ -95,22 +97,23 @@ picowota_retrieve_variable(PICOWOTA_WIFI_PASS true)
 picowota_retrieve_variable(PICOWOTA_WIFI_AP false)
 picowota_retrieve_variable(PICOWOTA_OTA_PIN false)
 
-if ((NOT PICOWOTA_WIFI_SSID) OR (NOT PICOWOTA_WIFI_PASS))
-        message(FATAL_ERROR
+if((NOT PICOWOTA_WIFI_SSID) OR(NOT PICOWOTA_WIFI_PASS))
+	message(FATAL_ERROR
 		"WiFi SSID/Pass not set, please set PICOWOTA_WIFI_SSID/PICOWOTA_WIFI_PASS."
 	)
-endif ()
+endif()
 
 # TODO: This causes a full rebuild if they change, configure_file might
 # be better.
 target_compile_definitions(picowota PUBLIC PICOWOTA_WIFI_SSID=${PICOWOTA_WIFI_SSID})
 target_compile_definitions(picowota PUBLIC PICOWOTA_WIFI_PASS=${PICOWOTA_WIFI_PASS})
-if (DEFINED PICOWOTA_OTA_PIN)
+
+if(DEFINED PICOWOTA_OTA_PIN)
 	target_compile_definitions(picowota PUBLIC PICOWOTA_OTA_PIN=${PICOWOTA_OTA_PIN})
 endif()
 
 # Use the WiFi AP mode upon request
-if (PICOWOTA_WIFI_AP)
+if(PICOWOTA_WIFI_AP)
 	target_compile_definitions(picowota PUBLIC PICOWOTA_WIFI_AP=1)
 	message("Building in WiFi AP mode.")
 endif()
@@ -125,10 +128,10 @@ endfunction()
 # Provide a helper to build a combined target
 # The build process is roughly:
 # 1. Build the bootloader, using a special linker script which leaves
-#    two sections to be filled in with the header (.app_hdr) and
-#    app binary (.app_bin)
+# two sections to be filled in with the header (.app_hdr) and
+# app binary (.app_bin)
 # 2. Build the app binary, using a special linker script to set the load
-#    address properly and skip boot2.
+# address properly and skip boot2.
 # 3. Calculate the checksum of the app binary
 # 4. Update the header and binary sections in the ELF from 1.
 function(picowota_build_combined NAME)
@@ -154,21 +157,22 @@ function(picowota_build_combined NAME)
 	add_dependencies(${COMBINED} picowota ${NAME}_hdr ${NAME})
 	add_custom_command(TARGET ${COMBINED} DEPENDS ${APP_HDR_BIN} ${APP_BIN}
 		COMMAND ${CMAKE_OBJCOPY}
-			--update-section .app_hdr=${APP_HDR_BIN}
-			--update-section .app_bin=${APP_BIN} ${PICOWOTA_BIN_DIR}/picowota.elf ${COMBINED}.elf
+		--update-section .app_hdr=${APP_HDR_BIN}
+		--update-section .app_bin=${APP_BIN} ${PICOWOTA_BIN_DIR}/picowota.elf ${COMBINED}.elf
 	)
 
 	add_custom_command(TARGET ${COMBINED} POST_BUILD
 		COMMAND ${CMAKE_OBJCOPY} -Obinary ${COMBINED}.elf ${COMBINED}.bin
 	)
 
-	if (NOT ELF2UF2_FOUND)
+	if(NOT ELF2UF2_FOUND)
 		set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PICO_SDK_PATH}/tools)
 		find_package(ELF2UF2)
 	endif()
-	if (ELF2UF2_FOUND)
+
+	if(ELF2UF2_FOUND)
 		add_custom_command(TARGET ${COMBINED} POST_BUILD
 			COMMAND ELF2UF2 ${COMBINED}.elf ${COMBINED}.uf2
-	)
+		)
 	endif()
 endfunction()
