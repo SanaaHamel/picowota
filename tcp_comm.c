@@ -458,14 +458,14 @@ static void tcp_comm_client_init(struct tcp_comm_ctx *ctx, struct tcp_pcb *pcb)
 	ctx->client_pcb = pcb;
 	tcp_arg(pcb, ctx);
 
-	cyw43_arch_gpio_put (0, true);
-
 	tcp_comm_sync_begin(ctx);
 
 	tcp_sent(pcb, tcp_comm_client_sent);
 	tcp_recv(pcb, tcp_comm_client_recv);
 	tcp_poll(pcb, tcp_comm_client_poll, POLL_TIME_S * 2);
 	tcp_err(pcb, tcp_comm_client_err);
+
+	cyw43_arch_gpio_put (0, true);
 }
 
 static err_t tcp_comm_server_accept(void *arg, struct tcp_pcb *client_pcb, err_t err)
