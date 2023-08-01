@@ -158,63 +158,6 @@ const struct comm_command read_cmd = {
 	.handle = &handle_read,
 };
 
-static uint32_t size_csum(uint32_t *args_in, uint32_t *data_len_out, uint32_t *resp_data_len_out)
-{
-	uint32_t addr = args_in[0];
-	uint32_t size = args_in[1];
-
-	if ((addr & 0x3) || (size & 0x3)) {
-		// Must be aligned
-		return TCP_COMM_RSP_ERR;
-	}
-
-	// TODO: Validate address
-
-	*data_len_out = 0;
-	*resp_data_len_out = 0;
-
-	return TCP_COMM_RSP_OK;
-}
-
-static uint32_t handle_csum(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_args_out, uint8_t *resp_data_out)
-{
-	uint32_t dummy_dest;
-	uint32_t addr = args_in[0];
-	uint32_t size = args_in[1];
-
-	int channel = dma_claim_unused_channel(true);
-
-	dma_channel_config c = dma_channel_get_default_config(channel);
-	channel_config_set_transfer_data_size(&c, DMA_SIZE_32);
-	channel_config_set_read_increment(&c, true);
-	channel_config_set_write_increment(&c, false);
-	channel_config_set_sniff_enable(&c, true);
-
-	dma_hw->sniff_data = 0;
-	dma_sniffer_enable(channel, 0xf, true);
-
-	dma_channel_configure(channel, &c, &dummy_dest, (void *)addr, size / 4, true);
-
-	dma_channel_wait_for_finish_blocking(channel);
-
-	dma_sniffer_disable();
-	dma_channel_unclaim(channel);
-
-	*resp_args_out = dma_hw->sniff_data;
-
-	return TCP_COMM_RSP_OK;
-}
-
-struct comm_command csum_cmd = {
-	// CSUM addr len
-	// OKOK csum
-	.opcode = CMD_CSUM,
-	.nargs = 2,
-	.resp_nargs = 1,
-	.size = &size_csum,
-	.handle = &handle_csum,
-};
-
 static uint32_t size_crc(uint32_t *args_in, uint32_t *data_len_out, uint32_t *resp_data_len_out)
 {
 	uint32_t addr = args_in[0];
@@ -635,7 +578,6 @@ int main()
 	const struct comm_command *cmds[] = {
 		&sync_cmd,
 		&read_cmd,
-		&csum_cmd,
 		&crc_cmd,
 		&erase_cmd,
 		&write_cmd,
