@@ -30,6 +30,10 @@
 
 #include "picowota/reboot.h"
 
+#ifndef PICOWOTA_ENABLE_READ
+#define PICOWOTA_ENABLE_READ 0
+#endif
+
 #ifdef DEBUG
 #include <stdio.h>
 #include "pico/stdio_usb.h"
@@ -123,6 +127,7 @@ const struct comm_command sync_cmd = {
 	.handle = &handle_sync,
 };
 
+#if PICOWOTA_ENABLE_READ
 static uint32_t size_read(uint32_t *args_in, uint32_t *data_len_out, uint32_t *resp_data_len_out)
 {
 	uint32_t size = args_in[1];
@@ -157,6 +162,7 @@ const struct comm_command read_cmd = {
 	.size = &size_read,
 	.handle = &handle_read,
 };
+#endif
 
 static uint32_t size_crc(uint32_t *args_in, uint32_t *data_len_out, uint32_t *resp_data_len_out)
 {
@@ -577,7 +583,9 @@ int main()
 
 	const struct comm_command *cmds[] = {
 		&sync_cmd,
+#if PICOWOTA_ENABLE_READ
 		&read_cmd,
+#endif
 		&crc_cmd,
 		&erase_cmd,
 		&write_cmd,
