@@ -60,7 +60,8 @@ target_include_directories(picowota PRIVATE
 	${CMAKE_CURRENT_LIST_DIR} # Needed so that lwip can find lwipopts.h
 	${CMAKE_CURRENT_LIST_DIR}/dhcpserver)
 
-pico_enable_stdio_usb(picowota 1)
+# pico_enable_stdio_usb(picowota 1)
+pico_enable_stdio_uart(picowota 1)
 
 add_subdirectory(picowota_reboot)
 

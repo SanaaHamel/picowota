@@ -36,8 +36,8 @@
 
 #ifdef DEBUG
 #include <stdio.h>
-#include "pico/stdio_usb.h"
-#define DBG_PRINTF_INIT() stdio_usb_init()
+#include "pico/stdio.h"
+#define DBG_PRINTF_INIT() stdio_init_all()
 #define DBG_PRINTF(...) printf(__VA_ARGS__)
 #else
 #define DBG_PRINTF_INIT() { }
