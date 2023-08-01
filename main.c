@@ -242,11 +242,14 @@ static uint32_t handle_erase(uint32_t *args_in, uint8_t *data_in, uint32_t *resp
 
 	if ((addr < ERASE_ADDR_MIN) || (addr + size >= FLASH_ADDR_MAX)) {
 		// Outside flash
+		DBG_PRINTF("erase outside flash region; flash-region=[0x%08x, 0x%08x] write=[0x%08x, 0x%08x]\n",
+			(unsigned)WRITE_ADDR_MIN, (unsigned)FLASH_ADDR_MAX, (unsigned)addr, (unsigned)(addr + size));
 		return TCP_COMM_RSP_ERR;
 	}
 
 	if ((addr & (FLASH_SECTOR_SIZE - 1)) || (size & (FLASH_SECTOR_SIZE - 1))) {
 		// Must be aligned
+		DBG_PRINTF("erase not aligned\n");
 		return TCP_COMM_RSP_ERR;
 	}
 
@@ -274,15 +277,19 @@ static uint32_t size_write(uint32_t *args_in, uint32_t *data_len_out, uint32_t *
 
 	if ((addr < WRITE_ADDR_MIN) || (addr + size >= FLASH_ADDR_MAX)) {
 		// Outside flash
+		DBG_PRINTF("write outside flash region; flash-region=[0x%08x, 0x%08x] write=[0x%08x, 0x%08x]\n",
+			(unsigned)WRITE_ADDR_MIN, (unsigned)FLASH_ADDR_MAX, (unsigned)addr, (unsigned)(addr + size));
 		return TCP_COMM_RSP_ERR;
 	}
 
 	if ((addr & (FLASH_PAGE_SIZE - 1)) || (size & (FLASH_PAGE_SIZE -1))) {
 		// Must be aligned
+		DBG_PRINTF("write not aligned\n");
 		return TCP_COMM_RSP_ERR;
 	}
 
 	if (size > TCP_COMM_MAX_DATA_LEN) {
+		DBG_PRINTF("write too big\n");
 		return TCP_COMM_RSP_ERR;
 	}
 
@@ -334,16 +341,24 @@ static bool image_header_ok(struct image_header *hdr)
 
 	// CRC has to match
 	if (calc != hdr->crc) {
+		DBG_PRINTF("bad crc; given=%u; actual=%u\n", (unsigned)hdr->crc, (unsigned)calc);
 		return false;
 	}
 
 	// Stack pointer needs to be in RAM
 	if (vtor[0] < SRAM_BASE) {
+		DBG_PRINTF("stack ptr 0x%08x < 0x%08x\n", (unsigned)vtor[0], (unsigned)SRAM_BASE);
 		return false;
 	}
 
 	// Reset vector should be in the image, and thumb (bit 0 set)
-	if ((vtor[1] < hdr->vtor) || (vtor[1] > hdr->vtor + hdr->size) || !(vtor[1] & 1)) {
+	if (!(hdr->vtor <= vtor[1] && vtor[1] < hdr->vtor + hdr->size)) {
+		DBG_PRINTF("reset vector not in img: vtor=0x%08u img=[0x%08u, 0x%08u]\n",
+			(unsigned)vtor[1], (unsigned)hdr->vtor, (unsigned)(hdr->vtor + hdr->size));
+		return false;
+	}
+	if (!(vtor[1] & 1)) {
+		DBG_PRINTF("thumb bit not set\n");
 		return false;
 	}
 
@@ -362,6 +377,7 @@ static uint32_t handle_seal(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_
 
 	if ((hdr.vtor & 0xff) || (hdr.size & 0x3)) {
 		// Must be aligned
+		DBG_PRINTF("hdr not aligned\n");
 		return TCP_COMM_RSP_ERR;
 	}
 
@@ -376,6 +392,7 @@ static uint32_t handle_seal(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_
 
 	struct image_header *check = (struct image_header *)(XIP_BASE + IMAGE_HEADER_OFFSET);
 	if (memcmp(&hdr, check, sizeof(hdr))) {
+		DBG_PRINTF("failed post-flash check\n");
 		return TCP_COMM_RSP_ERR;
 	}
 
@@ -491,6 +508,7 @@ static uint32_t handle_reboot(uint32_t *args_in, uint8_t *data_in, uint32_t *res
 	};
 
 	if (!queue_try_add(&event_queue, &ev)) {
+		DBG_PRINTF("failed to enqueue reboot\n");
 		return TCP_COMM_RSP_ERR;
 	}
 
