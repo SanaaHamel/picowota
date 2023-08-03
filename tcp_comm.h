@@ -8,8 +8,9 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "hardware/flash.h"
 
-#define TCP_COMM_MAX_DATA_LEN 1024
+#define TCP_COMM_MAX_DATA_LEN MIN(FLASH_BLOCK_SIZE, UINT16_MAX / 2)
 #define TCP_COMM_RSP_OK       (('O' << 0) | ('K' << 8) | ('O' << 16) | ('K' << 24))
 #define TCP_COMM_RSP_ERR      (('E' << 0) | ('R' << 8) | ('R' << 16) | ('!' << 24))
 

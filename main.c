@@ -102,10 +102,12 @@ struct event {
 #define FLASH_ADDR_MAX (XIP_BASE + PICO_FLASH_SIZE_BYTES)
 
 #define CMD_SYNC          (('S' << 0) | ('Y' << 8) | ('N' << 16) | ('C' << 24))
-#define RSP_SYNC          (('W' << 0) | ('O' << 8) | ('T' << 16) | ('A' << 24))
+#define RSP_SYNC          (('W' << 0) | ('o' << 8) | ('T' << 16) | ('a' << 24))
 #define CMD_INFO          (('I' << 0) | ('N' << 8) | ('F' << 16) | ('O' << 24))
 
+#define CMD_ERASE_WRITE   (('E' << 0) | ('R' << 8) | ('W' << 16) | ('R' << 24))
 #define CMD_READ   (('R' << 0) | ('E' << 8) | ('A' << 16) | ('D' << 24))
+#define CMD_CSUM   (('C' << 0) | ('S' << 8) | ('U' << 16) | ('M' << 24))
 #define CMD_CRC    (('C' << 0) | ('R' << 8) | ('C' << 16) | ('C' << 24))
 #define CMD_ERASE  (('E' << 0) | ('R' << 8) | ('A' << 16) | ('S' << 24))
 #define CMD_WRITE  (('W' << 0) | ('R' << 8) | ('I' << 16) | ('T' << 24))
@@ -232,6 +234,86 @@ struct comm_command crc_cmd = {
 	.resp_nargs = 1,
 	.size = &size_crc,
 	.handle = &handle_crc,
+};
+
+static uint32_t size_erase_write(uint32_t *args_in, uint32_t *data_len_out, uint32_t *resp_data_len_out)
+{
+	uint32_t addr = args_in[0];
+	uint32_t size = args_in[1];
+
+	if ((addr < WRITE_ADDR_MIN) || (addr + size >= FLASH_ADDR_MAX)) {
+		// Outside flash
+		DBG_PRINTF("write outside flash region; flash-region=[0x%08x, 0x%08x] write=[0x%08x, 0x%08x]\n",
+			(unsigned)WRITE_ADDR_MIN, (unsigned)FLASH_ADDR_MAX, (unsigned)addr, (unsigned)(addr + size));
+		return TCP_COMM_RSP_ERR;
+	}
+
+	if ((addr & (FLASH_PAGE_SIZE - 1)) || (size & (FLASH_PAGE_SIZE -1))) {
+		// Must be aligned
+		DBG_PRINTF("write not aligned\n");
+		return TCP_COMM_RSP_ERR;
+	}
+
+	// TODO: Validate address
+
+	*data_len_out = size;
+	*resp_data_len_out = 0;
+
+	return TCP_COMM_RSP_OK;
+}
+
+static uint32_t handle_erase_write(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_args_out, uint8_t *resp_data_out)
+{
+	uint32_t const addr = args_in[0];
+	uint32_t const size = args_in[1];
+	uint32_t const detailed = args_in[2];
+
+	if ((addr < ERASE_ADDR_MIN) || (addr + size >= FLASH_ADDR_MAX)) {
+		// Outside flash
+		DBG_PRINTF("erase outside flash region; flash-region=[0x%08x, 0x%08x] write=[0x%08x, 0x%08x]\n",
+			(unsigned)WRITE_ADDR_MIN, (unsigned)FLASH_ADDR_MAX, (unsigned)addr, (unsigned)(addr + size));
+		return TCP_COMM_RSP_ERR;
+	}
+
+	if ((addr & (FLASH_SECTOR_SIZE - 1)) || (size & (FLASH_SECTOR_SIZE - 1))) {
+		// Must be aligned
+		DBG_PRINTF("erase not aligned\n");
+		return TCP_COMM_RSP_ERR;
+	}
+
+	uint32_t changed = 0;
+	critical_section_enter_blocking(&critical_section);
+	{
+		if (detailed == 1) {
+			for (uint32_t i = 0; i < size; ++i)
+				changed += ((uint8_t*)addr)[i] != data_in[i];
+		} else {
+			changed = memcmp((void*)addr, data_in, size) != 0;
+		}
+
+		if (changed) {
+			flash_range_erase(addr - XIP_BASE, size);
+			flash_range_program(addr - XIP_BASE, data_in, size);
+		} else {
+			DBG_PRINTF("block [0x%08x, 0x%08x] identical - skipping...\n", (unsigned)addr, (unsigned)(addr + size));
+		}
+	}
+	critical_section_exit(&critical_section);
+
+	resp_args_out[0] = calc_crc32((void *)addr, size);
+	resp_args_out[1] = changed;
+
+	return TCP_COMM_RSP_OK;
+}
+
+struct comm_command erase_write_cmd = {
+	// ERWR addr len detailed-diff
+	// OKOK
+	.opcode = CMD_ERASE_WRITE,
+	.nargs = 3,
+	.resp_nargs = 2,
+	.size = &size_erase_write,
+	.handle = &handle_erase_write,
 };
 
 static uint32_t handle_erase(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_args_out, uint8_t *resp_data_out)
@@ -599,6 +681,7 @@ int main()
 	critical_section_init(&critical_section);
 
 	const struct comm_command *cmds[] = {
+		&erase_write_cmd,
 		&sync_cmd,
 #if PICOWOTA_ENABLE_READ
 		&read_cmd,
