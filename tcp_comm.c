@@ -24,7 +24,7 @@
 
 #define POLL_TIME_S 5
 
-#define COMM_MAX_NARG     5
+#define COMM_MAX_NARG     6
 
 enum conn_state {
 	CONN_STATE_WAIT_FOR_SYNC,

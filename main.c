@@ -11,6 +11,7 @@
 #include <stdlib.h>
 
 #include "RP2040.h"
+#include "boot/uf2.h"
 #include "pico/critical_section.h"
 #include "pico/time.h"
 #include "pico/util/queue.h"
@@ -97,6 +98,9 @@ struct event {
 
 #define IMAGE_HEADER_OFFSET (360 * 1024)
 
+#define BOOT_WRITE_ADDR_MIN (XIP_BASE)
+#define BOOT_WRITE_ADDR_MAX (XIP_BASE + IMAGE_HEADER_OFFSET)
+
 #define WRITE_ADDR_MIN (XIP_BASE + IMAGE_HEADER_OFFSET + FLASH_SECTOR_SIZE)
 #define ERASE_ADDR_MIN (XIP_BASE + IMAGE_HEADER_OFFSET)
 #define FLASH_ADDR_MAX (XIP_BASE + PICO_FLASH_SIZE_BYTES)
@@ -104,8 +108,10 @@ struct event {
 #define CMD_SYNC          (('S' << 0) | ('Y' << 8) | ('N' << 16) | ('C' << 24))
 #define RSP_SYNC          (('W' << 0) | ('o' << 8) | ('T' << 16) | ('a' << 24))
 #define CMD_INFO          (('I' << 0) | ('N' << 8) | ('F' << 16) | ('O' << 24))
+#define CMD_INFO_BOOT     (('B' << 0) | ('T' << 8) | ('I' << 16) | ('F' << 24))
 
-#define CMD_ERASE_WRITE   (('E' << 0) | ('R' << 8) | ('W' << 16) | ('R' << 24))
+#define CMD_ERASE_WRITE       (('E' << 0) | ('R' << 8) | ('W' << 16) | ('R' << 24))
+#define CMD_ERASE_WRITE_BOOT  (('B' << 0) | ('T' << 8) | ('E' << 16) | ('W' << 24))
 #define CMD_READ   (('R' << 0) | ('E' << 8) | ('A' << 16) | ('D' << 24))
 #define CMD_CSUM   (('C' << 0) | ('S' << 8) | ('U' << 16) | ('M' << 24))
 #define CMD_CRC    (('C' << 0) | ('R' << 8) | ('C' << 16) | ('C' << 24))
@@ -236,15 +242,15 @@ struct comm_command crc_cmd = {
 	.handle = &handle_crc,
 };
 
-static uint32_t size_erase_write(uint32_t const* const args_in, uint32_t* const data_len_out, uint32_t* const resp_data_len_out)
+static uint32_t size_erase_write_ex(uint32_t const write_min, uint32_t const write_max, uint32_t const* const args_in, uint32_t* const data_len_out, uint32_t* const resp_data_len_out)
 {
 	uint32_t addr = args_in[0];
 	uint32_t size = args_in[1];
 
-	if ((addr < WRITE_ADDR_MIN) || (addr + size >= FLASH_ADDR_MAX)) {
+	if ((addr < write_min) || (addr + size >= write_max)) {
 		// Outside flash
 		DBG_PRINTF("write outside flash region; flash-region=[0x%08x, 0x%08x] write=[0x%08x, 0x%08x]\n",
-			(unsigned)WRITE_ADDR_MIN, (unsigned)FLASH_ADDR_MAX, (unsigned)addr, (unsigned)(addr + size));
+			(unsigned)write_min, (unsigned)write_max, (unsigned)addr, (unsigned)(addr + size));
 		return TCP_COMM_RSP_ERR;
 	}
 
@@ -262,16 +268,16 @@ static uint32_t size_erase_write(uint32_t const* const args_in, uint32_t* const 
 	return TCP_COMM_RSP_OK;
 }
 
-static uint32_t handle_erase_write(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
+static uint32_t handle_erase_write_ex(uint32_t const write_min, uint32_t const write_max, uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
 	uint32_t const addr = args_in[0];
 	uint32_t const size = args_in[1];
 	uint32_t const detailed = args_in[2];
 
-	if ((addr < ERASE_ADDR_MIN) || (addr + size >= FLASH_ADDR_MAX)) {
+	if ((addr < write_min) || (addr + size >= write_max)) {
 		// Outside flash
 		DBG_PRINTF("erase outside flash region; flash-region=[0x%08x, 0x%08x] write=[0x%08x, 0x%08x]\n",
-			(unsigned)WRITE_ADDR_MIN, (unsigned)FLASH_ADDR_MAX, (unsigned)addr, (unsigned)(addr + size));
+			(unsigned)write_min, (unsigned)write_max, (unsigned)addr, (unsigned)(addr + size));
 		return TCP_COMM_RSP_ERR;
 	}
 
@@ -306,6 +312,16 @@ static uint32_t handle_erase_write(uint32_t const* const args_in, uint8_t const*
 	return TCP_COMM_RSP_OK;
 }
 
+static uint32_t size_erase_write(uint32_t const* const args_in, uint32_t* const data_len_out, uint32_t* const resp_data_len_out)
+{
+	return size_erase_write_ex(WRITE_ADDR_MIN, FLASH_ADDR_MAX, args_in, data_len_out, resp_data_len_out);
+}
+
+static uint32_t handle_erase_write(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
+{
+	return handle_erase_write_ex(WRITE_ADDR_MIN, FLASH_ADDR_MAX, args_in, data_in, resp_args_out, resp_data_out);
+}
+
 struct comm_command erase_write_cmd = {
 	// ERWR addr len detailed-diff
 	// OKOK crc changed
@@ -315,6 +331,28 @@ struct comm_command erase_write_cmd = {
 	.size = &size_erase_write,
 	.handle = &handle_erase_write,
 };
+
+
+static uint32_t size_erase_write_boot(uint32_t const* const args_in, uint32_t* const data_len_out, uint32_t* const resp_data_len_out)
+{
+	return size_erase_write_ex(BOOT_WRITE_ADDR_MIN, BOOT_WRITE_ADDR_MAX, args_in, data_len_out, resp_data_len_out);
+}
+
+static uint32_t handle_erase_write_boot(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
+{
+	return handle_erase_write_ex(BOOT_WRITE_ADDR_MIN, BOOT_WRITE_ADDR_MAX, args_in, data_in, resp_args_out, resp_data_out);
+}
+
+struct comm_command erase_write_boot_cmd = {
+	// BTEW addr len detailed-diff
+	// OKOK crc changed
+	.opcode = CMD_ERASE_WRITE_BOOT,
+	.nargs = 3,
+	.resp_nargs = 2,
+	.size = &size_erase_write_boot,
+	.handle = &handle_erase_write_boot,
+};
+
 
 static uint32_t handle_erase(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
@@ -571,6 +609,29 @@ const struct comm_command info_cmd = {
 	.handle = &handle_info,
 };
 
+
+static uint32_t handle_info_boot(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
+{
+	resp_args_out[0] = RP2040_FAMILY_ID;
+	resp_args_out[1] = XIP_BASE;
+	resp_args_out[2] = IMAGE_HEADER_OFFSET;
+	resp_args_out[3] = FLASH_SECTOR_SIZE;
+	resp_args_out[4] = FLASH_PAGE_SIZE;
+	resp_args_out[5] = TCP_COMM_MAX_DATA_LEN;
+
+	return TCP_COMM_RSP_OK;
+}
+
+const struct comm_command info_boot_cmd = {
+	// BTIF
+	// OKOK boot_start boot_size erase_size write_size max_data_len
+	.opcode = CMD_INFO_BOOT,
+	.nargs = 0,
+	.resp_nargs = 6,
+	.size = NULL,
+	.handle = &handle_info_boot,
+};
+
 static uint32_t handle_reboot(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
 	struct event ev = {
@@ -674,6 +735,7 @@ int main()
 
 	const struct comm_command *cmds[] = {
 		&erase_write_cmd,
+		&erase_write_boot_cmd,
 		&sync_cmd,
 #if PICOWOTA_ENABLE_READ
 		&read_cmd,
@@ -684,6 +746,7 @@ int main()
 		&seal_cmd,
 		&go_cmd,
 		&info_cmd,
+		&info_boot_cmd,
 		&reboot_cmd,
 	};
 

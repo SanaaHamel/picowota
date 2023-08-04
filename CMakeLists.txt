@@ -54,6 +54,12 @@ target_cl_options("-ffunction-sections")
 target_cl_options("-fdata-sections")
 target_link_options(picowota PRIVATE "LINKER:--gc-sections")
 
+# CWY43 drivers are very large. Can't fit them in RAM.
+# Good news is that we don't need it after the chip is init'd.
+# So long as the flash writes happen after that, we're okay.
+add_compile_definitions("CYW43_RESOURCE_ATTRIBUTE=__attribute__((aligned(4), section(\".flashdata.cyw43_firmware\")))")
+pico_set_binary_type(picowota copy_to_ram)
+
 pico_add_extra_outputs(picowota)
 
 target_include_directories(picowota PRIVATE
@@ -66,6 +72,7 @@ pico_enable_stdio_uart(picowota 1)
 add_subdirectory(picowota_reboot)
 
 target_link_libraries(picowota
+	boot_uf2_headers
 	cmsis_core
 	hardware_dma
 	hardware_flash
