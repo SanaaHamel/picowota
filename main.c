@@ -571,14 +571,6 @@ const struct comm_command info_cmd = {
 	.handle = &handle_info,
 };
 
-static uint32_t size_reboot(uint32_t const* const args_in, uint32_t* const data_len_out, uint32_t* const resp_data_len_out)
-{
-	*data_len_out = 0;
-	*resp_data_len_out = 0;
-
-	return TCP_COMM_RSP_OK;
-}
-
 static uint32_t handle_reboot(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
 	struct event ev = {
@@ -602,7 +594,7 @@ struct comm_command reboot_cmd = {
 	.opcode = CMD_REBOOT,
 	.nargs = 1,
 	.resp_nargs = 0,
-	.size = &size_reboot,
+	.size = NULL,
 	.handle = &handle_reboot,
 };
 
