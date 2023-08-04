@@ -15,7 +15,7 @@
 
 #include "tcp_comm.h"
 
-#ifdef DEBUG
+#ifndef NDEBUG
 #include <stdio.h>
 #define DEBUG_printf(...) printf(__VA_ARGS__)
 #else

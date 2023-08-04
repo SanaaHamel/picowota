@@ -34,7 +34,7 @@
 #define PICOWOTA_ENABLE_READ 0
 #endif
 
-#ifdef DEBUG
+#ifndef NDEBUG
 #include <stdio.h>
 #include "pico/stdio.h"
 #define DBG_PRINTF_INIT() stdio_init_all()
