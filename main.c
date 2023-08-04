@@ -308,7 +308,7 @@ static uint32_t handle_erase_write(uint32_t const* const args_in, uint8_t const*
 
 struct comm_command erase_write_cmd = {
 	// ERWR addr len detailed-diff
-	// OKOK
+	// OKOK crc changed
 	.opcode = CMD_ERASE_WRITE,
 	.nargs = 3,
 	.resp_nargs = 2,
