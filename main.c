@@ -115,7 +115,7 @@ struct event {
 #define CMD_GO     (('G' << 0) | ('O' << 8) | ('G' << 16) | ('O' << 24))
 #define CMD_REBOOT (('B' << 0) | ('O' << 8) | ('O' << 16) | ('T' << 24))
 
-static uint32_t handle_sync(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_args_out, uint8_t *resp_data_out)
+static uint32_t handle_sync(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
 	return RSP_SYNC;
 }
@@ -129,7 +129,7 @@ const struct comm_command sync_cmd = {
 };
 
 #if PICOWOTA_ENABLE_READ
-static uint32_t size_read(uint32_t *args_in, uint32_t *data_len_out, uint32_t *resp_data_len_out)
+static uint32_t size_read(uint32_t const* const args_in, uint32_t* const data_len_out, uint32_t* const resp_data_len_out)
 {
 	uint32_t size = args_in[1];
 	if (size > TCP_COMM_MAX_DATA_LEN) {
@@ -144,7 +144,7 @@ static uint32_t size_read(uint32_t *args_in, uint32_t *data_len_out, uint32_t *r
 	return TCP_COMM_RSP_OK;
 }
 
-static uint32_t handle_read(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_args_out, uint8_t *resp_data_out)
+static uint32_t handle_read(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
 	uint32_t addr = args_in[0];
 	uint32_t size = args_in[1];
@@ -165,7 +165,7 @@ const struct comm_command read_cmd = {
 };
 #endif
 
-static uint32_t size_crc(uint32_t *args_in, uint32_t *data_len_out, uint32_t *resp_data_len_out)
+static uint32_t size_crc(uint32_t const* const args_in, uint32_t* const data_len_out, uint32_t* const resp_data_len_out)
 {
 	uint32_t addr = args_in[0];
 	uint32_t size = args_in[1];
@@ -184,7 +184,7 @@ static uint32_t size_crc(uint32_t *args_in, uint32_t *data_len_out, uint32_t *re
 }
 
 // ptr must be 4-byte aligned and len must be a multiple of 4
-static uint32_t calc_crc32(void *ptr, uint32_t len)
+static uint32_t calc_crc32(void const* const ptr, uint32_t const len)
 {
 	uint32_t dummy_dest, crc;
 
@@ -216,7 +216,7 @@ static uint32_t calc_crc32(void *ptr, uint32_t len)
 	return crc;
 }
 
-static uint32_t handle_crc(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_args_out, uint8_t *resp_data_out)
+static uint32_t handle_crc(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
 	uint32_t addr = args_in[0];
 	uint32_t size = args_in[1];
@@ -236,7 +236,7 @@ struct comm_command crc_cmd = {
 	.handle = &handle_crc,
 };
 
-static uint32_t size_erase_write(uint32_t *args_in, uint32_t *data_len_out, uint32_t *resp_data_len_out)
+static uint32_t size_erase_write(uint32_t const* const args_in, uint32_t* const data_len_out, uint32_t* const resp_data_len_out)
 {
 	uint32_t addr = args_in[0];
 	uint32_t size = args_in[1];
@@ -262,7 +262,7 @@ static uint32_t size_erase_write(uint32_t *args_in, uint32_t *data_len_out, uint
 	return TCP_COMM_RSP_OK;
 }
 
-static uint32_t handle_erase_write(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_args_out, uint8_t *resp_data_out)
+static uint32_t handle_erase_write(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
 	uint32_t const addr = args_in[0];
 	uint32_t const size = args_in[1];
@@ -316,7 +316,7 @@ struct comm_command erase_write_cmd = {
 	.handle = &handle_erase_write,
 };
 
-static uint32_t handle_erase(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_args_out, uint8_t *resp_data_out)
+static uint32_t handle_erase(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
 	uint32_t addr = args_in[0];
 	uint32_t size = args_in[1];
@@ -351,7 +351,7 @@ struct comm_command erase_cmd = {
 	.handle = &handle_erase,
 };
 
-static uint32_t size_write(uint32_t *args_in, uint32_t *data_len_out, uint32_t *resp_data_len_out)
+static uint32_t size_write(uint32_t const* const args_in, uint32_t* const data_len_out, uint32_t* const resp_data_len_out)
 {
 	uint32_t addr = args_in[0];
 	uint32_t size = args_in[1];
@@ -382,7 +382,7 @@ static uint32_t size_write(uint32_t *args_in, uint32_t *data_len_out, uint32_t *
 	return TCP_COMM_RSP_OK;
 }
 
-static uint32_t handle_write(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_args_out, uint8_t *resp_data_out)
+static uint32_t handle_write(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
 	uint32_t addr = args_in[0];
 	uint32_t size = args_in[1];
@@ -414,7 +414,7 @@ struct image_header {
 };
 static_assert(sizeof(struct image_header) == FLASH_PAGE_SIZE, "image_header must be FLASH_PAGE_SIZE bytes");
 
-static bool image_header_ok(struct image_header *hdr)
+static bool image_header_ok(struct image_header const* const hdr)
 {
 	uint32_t *vtor = (uint32_t *)hdr->vtor;
 
@@ -448,7 +448,7 @@ static bool image_header_ok(struct image_header *hdr)
 }
 
 
-static uint32_t handle_seal(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_args_out, uint8_t *resp_data_out)
+static uint32_t handle_seal(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
 	struct image_header hdr = {
 		.vtor = args_in[0],
@@ -524,7 +524,7 @@ static void jump_to_vtor(uint32_t vtor)
 }
 
 
-static uint32_t handle_go(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_args_out, uint8_t *resp_data_out)
+static uint32_t handle_go(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
 	struct event ev = {
 		.type = EVENT_TYPE_GO,
@@ -550,7 +550,7 @@ struct comm_command go_cmd = {
 	.handle = &handle_go,
 };
 
-static uint32_t handle_info(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_args_out, uint8_t *resp_data_out)
+static uint32_t handle_info(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
 	resp_args_out[0] = WRITE_ADDR_MIN;
 	resp_args_out[1] = (XIP_BASE + PICO_FLASH_SIZE_BYTES) - WRITE_ADDR_MIN;
@@ -571,7 +571,7 @@ const struct comm_command info_cmd = {
 	.handle = &handle_info,
 };
 
-static uint32_t size_reboot(uint32_t *args_in, uint32_t *data_len_out, uint32_t *resp_data_len_out)
+static uint32_t size_reboot(uint32_t const* const args_in, uint32_t* const data_len_out, uint32_t* const resp_data_len_out)
 {
 	*data_len_out = 0;
 	*resp_data_len_out = 0;
@@ -579,7 +579,7 @@ static uint32_t size_reboot(uint32_t *args_in, uint32_t *data_len_out, uint32_t 
 	return TCP_COMM_RSP_OK;
 }
 
-static uint32_t handle_reboot(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_args_out, uint8_t *resp_data_out)
+static uint32_t handle_reboot(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
 	struct event ev = {
 		.type = EVENT_TYPE_REBOOT,

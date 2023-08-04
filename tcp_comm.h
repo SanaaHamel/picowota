@@ -19,8 +19,8 @@ struct comm_command {
 	uint32_t opcode;
 	uint32_t nargs;
 	uint32_t resp_nargs;
-	uint32_t (*size)(uint32_t *args_in, uint32_t *data_len_out, uint32_t *resp_data_len_out);
-	uint32_t (*handle)(uint32_t *args_in, uint8_t *data_in, uint32_t *resp_args_out, uint8_t *resp_data_out);
+	uint32_t (*size)(uint32_t const* args_in, uint32_t* data_len_out, uint32_t* resp_data_len_out);
+	uint32_t (*handle)(uint32_t const* args_in, uint8_t const* data_in, uint32_t* resp_args_out, uint8_t* resp_data_out);
 };
 
 struct tcp_comm_ctx;
