@@ -59,7 +59,8 @@ target_link_options(picowota PRIVATE "LINKER:--gc-sections")
 # So long as the flash writes happen after that, we're okay.
 add_compile_definitions("CYW43_RESOURCE_ATTRIBUTE=__attribute__((aligned(4), section(\".flashdata.cyw43_firmware\")))")
 pico_set_binary_type(picowota copy_to_ram)
-
+get_target_property(PICOWOTA_SRC_DIR picowota SOURCE_DIR)
+pico_set_linker_script(picowota ${PICOWOTA_SRC_DIR}/bootloader_shell.ld)
 pico_add_extra_outputs(picowota)
 
 target_include_directories(picowota PRIVATE
