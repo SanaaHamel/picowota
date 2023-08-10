@@ -31,6 +31,8 @@
 
 #include "picowota/reboot.h"
 
+static_assert(sizeof(uint32_t) < sizeof(uint64_t), "need to fix overflow checks");
+
 #ifndef PICOWOTA_ENABLE_READ
 #define PICOWOTA_ENABLE_READ 0
 #endif
@@ -247,7 +249,8 @@ static uint32_t size_erase_write_ex(uint32_t const write_min, uint32_t const wri
 	uint32_t addr = args_in[0];
 	uint32_t size = args_in[1];
 
-	if ((addr < write_min) || (addr + size >= write_max)) {
+	static_assert(sizeof(uint32_t) < sizeof(uint64_t), "need to fix overflow check");
+	if ((addr < write_min) || (write_max < (((uint64_t)addr) + size))) {
 		// Outside flash
 		DBG_PRINTF("write outside flash region; flash-region=[0x%08x, 0x%08x] write=[0x%08x, 0x%08x]\n",
 			(unsigned)write_min, (unsigned)write_max, (unsigned)addr, (unsigned)(addr + size));
@@ -274,7 +277,8 @@ static uint32_t handle_erase_write_ex(uint32_t const write_min, uint32_t const w
 	uint32_t const size = args_in[1];
 	uint32_t const detailed = args_in[2];
 
-	if ((addr < write_min) || (addr + size >= write_max)) {
+	static_assert(sizeof(uint32_t) < sizeof(uint64_t), "need to fix overflow check");
+	if ((addr < write_min) || (write_max < (((uint64_t)addr) + size))) {
 		// Outside flash
 		DBG_PRINTF("erase outside flash region; flash-region=[0x%08x, 0x%08x] write=[0x%08x, 0x%08x]\n",
 			(unsigned)write_min, (unsigned)write_max, (unsigned)addr, (unsigned)(addr + size));
@@ -359,7 +363,7 @@ static uint32_t handle_erase(uint32_t const* const args_in, uint8_t const* const
 	uint32_t addr = args_in[0];
 	uint32_t size = args_in[1];
 
-	if ((addr < ERASE_ADDR_MIN) || (addr + size >= FLASH_ADDR_MAX)) {
+	if ((addr < ERASE_ADDR_MIN) || (FLASH_ADDR_MAX < (((uint64_t)addr) + size))) {
 		// Outside flash
 		DBG_PRINTF("erase outside flash region; flash-region=[0x%08x, 0x%08x] write=[0x%08x, 0x%08x]\n",
 			(unsigned)WRITE_ADDR_MIN, (unsigned)FLASH_ADDR_MAX, (unsigned)addr, (unsigned)(addr + size));
@@ -394,7 +398,7 @@ static uint32_t size_write(uint32_t const* const args_in, uint32_t* const data_l
 	uint32_t addr = args_in[0];
 	uint32_t size = args_in[1];
 
-	if ((addr < WRITE_ADDR_MIN) || (addr + size >= FLASH_ADDR_MAX)) {
+	if ((addr < WRITE_ADDR_MIN) || (FLASH_ADDR_MAX < (((uint64_t)addr) + size))) {
 		// Outside flash
 		DBG_PRINTF("write outside flash region; flash-region=[0x%08x, 0x%08x] write=[0x%08x, 0x%08x]\n",
 			(unsigned)WRITE_ADDR_MIN, (unsigned)FLASH_ADDR_MAX, (unsigned)addr, (unsigned)(addr + size));
