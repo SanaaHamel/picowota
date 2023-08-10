@@ -122,14 +122,15 @@ struct event {
 
 #define CMD_ERASE_WRITE       (('E' << 0) | ('R' << 8) | ('W' << 16) | ('R' << 24))
 #define CMD_ERASE_WRITE_BOOT  (('B' << 0) | ('T' << 8) | ('E' << 16) | ('W' << 24))
-#define CMD_READ   (('R' << 0) | ('E' << 8) | ('A' << 16) | ('D' << 24))
-#define CMD_CSUM   (('C' << 0) | ('S' << 8) | ('U' << 16) | ('M' << 24))
-#define CMD_CRC    (('C' << 0) | ('R' << 8) | ('C' << 16) | ('C' << 24))
-#define CMD_ERASE  (('E' << 0) | ('R' << 8) | ('A' << 16) | ('S' << 24))
-#define CMD_WRITE  (('W' << 0) | ('R' << 8) | ('I' << 16) | ('T' << 24))
-#define CMD_SEAL   (('S' << 0) | ('E' << 8) | ('A' << 16) | ('L' << 24))
-#define CMD_GO     (('G' << 0) | ('O' << 8) | ('G' << 16) | ('O' << 24))
-#define CMD_REBOOT (('B' << 0) | ('O' << 8) | ('O' << 16) | ('T' << 24))
+#define CMD_READ   						(('R' << 0) | ('E' << 8) | ('A' << 16) | ('D' << 24))
+#define CMD_CSUM   						(('C' << 0) | ('S' << 8) | ('U' << 16) | ('M' << 24))
+#define CMD_CRC    						(('C' << 0) | ('R' << 8) | ('C' << 16) | ('C' << 24))
+#define CMD_ERASE  						(('E' << 0) | ('R' << 8) | ('A' << 16) | ('S' << 24))
+#define CMD_ERASE_BOOT  			(('B' << 0) | ('T' << 8) | ('E' << 16) | ('R' << 24))
+#define CMD_WRITE  						(('W' << 0) | ('R' << 8) | ('I' << 16) | ('T' << 24))
+#define CMD_SEAL   						(('S' << 0) | ('E' << 8) | ('A' << 16) | ('L' << 24))
+#define CMD_GO     						(('G' << 0) | ('O' << 8) | ('G' << 16) | ('O' << 24))
+#define CMD_REBOOT 						(('B' << 0) | ('O' << 8) | ('O' << 16) | ('T' << 24))
 
 static uint32_t handle_sync(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
@@ -363,16 +364,15 @@ struct comm_command erase_write_boot_cmd = {
 	.handle = &handle_erase_write_boot,
 };
 
-
-static uint32_t handle_erase(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
+static uint32_t handle_erase_ex(uint32_t const write_min, uint32_t const write_max, uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
-	uint32_t addr = args_in[0];
-	uint32_t size = args_in[1];
+	uint32_t const addr = args_in[0];
+	uint32_t const size = args_in[1];
 
-	if ((addr < ERASE_ADDR_MIN) || (FLASH_ADDR_MAX < (((uint64_t)addr) + size))) {
+	if ((addr < write_min) || (write_max < (((uint64_t)addr) + size))) {
 		// Outside flash
 		DBG_PRINTF("erase outside flash region; flash-region=[0x%08x, 0x%08x] write=[0x%08x, 0x%08x]\n",
-			(unsigned)WRITE_ADDR_MIN, (unsigned)FLASH_ADDR_MAX, (unsigned)addr, (unsigned)(addr + size));
+			(unsigned)write_min, (unsigned)write_max, (unsigned)addr, (unsigned)(addr + size));
 		return STREAM_COMM_RSP_ERR;
 	}
 
@@ -387,6 +387,26 @@ static uint32_t handle_erase(uint32_t const* const args_in, uint8_t const* const
 	critical_section_exit(&critical_section);
 
 	return STREAM_COMM_RSP_OK;
+}
+
+static uint32_t handle_erase_boot(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
+{
+	return handle_erase_ex(BOOT_WRITE_ADDR_MIN, BOOT_WRITE_ADDR_MAX, args_in, data_in, resp_args_out, resp_data_out);
+}
+
+struct comm_command erase_boot_cmd = {
+	// BTER addr len
+	// OKOK
+	.opcode = CMD_ERASE_BOOT,
+	.nargs = 2,
+	.resp_nargs = 0,
+	.size = NULL,
+	.handle = &handle_erase_boot,
+};
+
+static uint32_t handle_erase(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
+{
+	return handle_erase_ex(ERASE_ADDR_MIN, FLASH_ADDR_MAX, args_in, data_in, resp_args_out, resp_data_out);
 }
 
 struct comm_command erase_cmd = {
@@ -774,6 +794,7 @@ int main()
 #endif
 		&crc_cmd,
 		&erase_cmd,
+		&erase_boot_cmd,
 		&write_cmd,
 		&seal_cmd,
 		&go_cmd,
