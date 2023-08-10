@@ -761,9 +761,9 @@ int main()
 	gpio_init(PICOWOTA_OTA_PIN);
 	gpio_pull_up(PICOWOTA_OTA_PIN);
 	gpio_set_dir(PICOWOTA_OTA_PIN, 0);
-#endif
 
 	sleep_ms(10);
+#endif
 
 	struct image_header *hdr = (struct image_header *)(XIP_BASE + IMAGE_HEADER_OFFSET);
 
