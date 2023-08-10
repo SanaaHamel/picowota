@@ -27,7 +27,8 @@
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
 
-#include "tcp_comm.h"
+#include "comm_stream.h"
+#include "comm_tcp.h"
 
 #include "picowota/reboot.h"
 
@@ -55,6 +56,7 @@ static dhcp_server_t dhcp_server;
 #define QUOTE(name) #name
 #define STR(macro) QUOTE(macro)
 
+#if PICOWOTA_WIFI
 #ifndef PICOWOTA_WIFI_SSID
 #warning "PICOWOTA_WIFI_SSID not defined"
 #else
@@ -65,6 +67,7 @@ const char *wifi_ssid = STR(PICOWOTA_WIFI_SSID);
 #warning "PICOWOTA_WIFI_PASS not defined"
 #else
 const char *wifi_pass = STR(PICOWOTA_WIFI_PASS);
+#endif
 #endif
 
 critical_section_t critical_section;
@@ -140,8 +143,8 @@ const struct comm_command sync_cmd = {
 static uint32_t size_read(uint32_t const* const args_in, uint32_t* const data_len_out, uint32_t* const resp_data_len_out)
 {
 	uint32_t size = args_in[1];
-	if (size > TCP_COMM_MAX_DATA_LEN) {
-		return TCP_COMM_RSP_ERR;
+	if (size > STREAM_COMM_MAX_DATA_LEN) {
+		return STREAM_COMM_RSP_ERR;
 	}
 
 	// TODO: Validate address
@@ -149,7 +152,7 @@ static uint32_t size_read(uint32_t const* const args_in, uint32_t* const data_le
 	*data_len_out = 0;
 	*resp_data_len_out = size;
 
-	return TCP_COMM_RSP_OK;
+	return STREAM_COMM_RSP_OK;
 }
 
 static uint32_t handle_read(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
@@ -159,7 +162,7 @@ static uint32_t handle_read(uint32_t const* const args_in, uint8_t const* const 
 
 	memcpy(resp_data_out, (void *)addr, size);
 
-	return TCP_COMM_RSP_OK;
+	return STREAM_COMM_RSP_OK;
 }
 
 const struct comm_command read_cmd = {
@@ -180,7 +183,7 @@ static uint32_t size_crc(uint32_t const* const args_in, uint32_t* const data_len
 
 	if ((addr & 0x3) || (size & 0x3)) {
 		// Must be aligned
-		return TCP_COMM_RSP_ERR;
+		return STREAM_COMM_RSP_ERR;
 	}
 
 	// TODO: Validate address
@@ -188,7 +191,7 @@ static uint32_t size_crc(uint32_t const* const args_in, uint32_t* const data_len
 	*data_len_out = 0;
 	*resp_data_len_out = 0;
 
-	return TCP_COMM_RSP_OK;
+	return STREAM_COMM_RSP_OK;
 }
 
 // ptr must be 4-byte aligned and len must be a multiple of 4
@@ -231,7 +234,7 @@ static uint32_t handle_crc(uint32_t const* const args_in, uint8_t const* const d
 
 	resp_args_out[0] = calc_crc32((void *)addr, size);
 
-	return TCP_COMM_RSP_OK;
+	return STREAM_COMM_RSP_OK;
 }
 
 struct comm_command crc_cmd = {
@@ -249,18 +252,17 @@ static uint32_t size_erase_write_ex(uint32_t const write_min, uint32_t const wri
 	uint32_t addr = args_in[0];
 	uint32_t size = args_in[1];
 
-	static_assert(sizeof(uint32_t) < sizeof(uint64_t), "need to fix overflow check");
 	if ((addr < write_min) || (write_max < (((uint64_t)addr) + size))) {
 		// Outside flash
 		DBG_PRINTF("write outside flash region; flash-region=[0x%08x, 0x%08x] write=[0x%08x, 0x%08x]\n",
 			(unsigned)write_min, (unsigned)write_max, (unsigned)addr, (unsigned)(addr + size));
-		return TCP_COMM_RSP_ERR;
+		return STREAM_COMM_RSP_ERR;
 	}
 
 	if ((addr & (FLASH_PAGE_SIZE - 1)) || (size & (FLASH_PAGE_SIZE -1))) {
 		// Must be aligned
 		DBG_PRINTF("write not aligned\n");
-		return TCP_COMM_RSP_ERR;
+		return STREAM_COMM_RSP_ERR;
 	}
 
 	// TODO: Validate address
@@ -268,7 +270,7 @@ static uint32_t size_erase_write_ex(uint32_t const write_min, uint32_t const wri
 	*data_len_out = size;
 	*resp_data_len_out = 0;
 
-	return TCP_COMM_RSP_OK;
+	return STREAM_COMM_RSP_OK;
 }
 
 static uint32_t handle_erase_write_ex(uint32_t const write_min, uint32_t const write_max, uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
@@ -277,18 +279,17 @@ static uint32_t handle_erase_write_ex(uint32_t const write_min, uint32_t const w
 	uint32_t const size = args_in[1];
 	uint32_t const detailed = args_in[2];
 
-	static_assert(sizeof(uint32_t) < sizeof(uint64_t), "need to fix overflow check");
 	if ((addr < write_min) || (write_max < (((uint64_t)addr) + size))) {
 		// Outside flash
 		DBG_PRINTF("erase outside flash region; flash-region=[0x%08x, 0x%08x] write=[0x%08x, 0x%08x]\n",
 			(unsigned)write_min, (unsigned)write_max, (unsigned)addr, (unsigned)(addr + size));
-		return TCP_COMM_RSP_ERR;
+		return STREAM_COMM_RSP_ERR;
 	}
 
 	if ((addr & (FLASH_SECTOR_SIZE - 1)) || (size & (FLASH_SECTOR_SIZE - 1))) {
 		// Must be aligned
 		DBG_PRINTF("erase not aligned\n");
-		return TCP_COMM_RSP_ERR;
+		return STREAM_COMM_RSP_ERR;
 	}
 
 	uint32_t changed = 0;
@@ -313,7 +314,7 @@ static uint32_t handle_erase_write_ex(uint32_t const write_min, uint32_t const w
 	resp_args_out[0] = calc_crc32((void *)addr, size);
 	resp_args_out[1] = changed;
 
-	return TCP_COMM_RSP_OK;
+	return STREAM_COMM_RSP_OK;
 }
 
 static uint32_t size_erase_write(uint32_t const* const args_in, uint32_t* const data_len_out, uint32_t* const resp_data_len_out)
@@ -367,20 +368,20 @@ static uint32_t handle_erase(uint32_t const* const args_in, uint8_t const* const
 		// Outside flash
 		DBG_PRINTF("erase outside flash region; flash-region=[0x%08x, 0x%08x] write=[0x%08x, 0x%08x]\n",
 			(unsigned)WRITE_ADDR_MIN, (unsigned)FLASH_ADDR_MAX, (unsigned)addr, (unsigned)(addr + size));
-		return TCP_COMM_RSP_ERR;
+		return STREAM_COMM_RSP_ERR;
 	}
 
 	if ((addr & (FLASH_SECTOR_SIZE - 1)) || (size & (FLASH_SECTOR_SIZE - 1))) {
 		// Must be aligned
 		DBG_PRINTF("erase not aligned\n");
-		return TCP_COMM_RSP_ERR;
+		return STREAM_COMM_RSP_ERR;
 	}
 
 	critical_section_enter_blocking(&critical_section);
 	flash_range_erase(addr - XIP_BASE, size);
 	critical_section_exit(&critical_section);
 
-	return TCP_COMM_RSP_OK;
+	return STREAM_COMM_RSP_OK;
 }
 
 struct comm_command erase_cmd = {
@@ -402,18 +403,18 @@ static uint32_t size_write(uint32_t const* const args_in, uint32_t* const data_l
 		// Outside flash
 		DBG_PRINTF("write outside flash region; flash-region=[0x%08x, 0x%08x] write=[0x%08x, 0x%08x]\n",
 			(unsigned)WRITE_ADDR_MIN, (unsigned)FLASH_ADDR_MAX, (unsigned)addr, (unsigned)(addr + size));
-		return TCP_COMM_RSP_ERR;
+		return STREAM_COMM_RSP_ERR;
 	}
 
 	if ((addr & (FLASH_PAGE_SIZE - 1)) || (size & (FLASH_PAGE_SIZE -1))) {
 		// Must be aligned
 		DBG_PRINTF("write not aligned\n");
-		return TCP_COMM_RSP_ERR;
+		return STREAM_COMM_RSP_ERR;
 	}
 
-	if (size > TCP_COMM_MAX_DATA_LEN) {
+	if (size > STREAM_COMM_MAX_DATA_LEN) {
 		DBG_PRINTF("write too big\n");
-		return TCP_COMM_RSP_ERR;
+		return STREAM_COMM_RSP_ERR;
 	}
 
 	// TODO: Validate address
@@ -421,7 +422,7 @@ static uint32_t size_write(uint32_t const* const args_in, uint32_t* const data_l
 	*data_len_out = size;
 	*resp_data_len_out = 0;
 
-	return TCP_COMM_RSP_OK;
+	return STREAM_COMM_RSP_OK;
 }
 
 static uint32_t handle_write(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
@@ -435,7 +436,7 @@ static uint32_t handle_write(uint32_t const* const args_in, uint8_t const* const
 
 	resp_args_out[0] = calc_crc32((void *)addr, size);
 
-	return TCP_COMM_RSP_OK;
+	return STREAM_COMM_RSP_OK;
 }
 
 struct comm_command write_cmd = {
@@ -501,11 +502,11 @@ static uint32_t handle_seal(uint32_t const* const args_in, uint8_t const* const 
 	if ((hdr.vtor & 0xff) || (hdr.size & 0x3)) {
 		// Must be aligned
 		DBG_PRINTF("hdr not aligned\n");
-		return TCP_COMM_RSP_ERR;
+		return STREAM_COMM_RSP_ERR;
 	}
 
 	if (!image_header_ok(&hdr)) {
-		return TCP_COMM_RSP_ERR;
+		return STREAM_COMM_RSP_ERR;
 	}
 
 	critical_section_enter_blocking(&critical_section);
@@ -516,10 +517,10 @@ static uint32_t handle_seal(uint32_t const* const args_in, uint8_t const* const 
 	struct image_header *check = (struct image_header *)(XIP_BASE + IMAGE_HEADER_OFFSET);
 	if (memcmp(&hdr, check, sizeof(hdr))) {
 		DBG_PRINTF("failed post-flash check\n");
-		return TCP_COMM_RSP_ERR;
+		return STREAM_COMM_RSP_ERR;
 	}
 
-	return TCP_COMM_RSP_OK;
+	return STREAM_COMM_RSP_OK;
 }
 
 struct comm_command seal_cmd = {
@@ -576,10 +577,10 @@ static uint32_t handle_go(uint32_t const* const args_in, uint8_t const* const da
 	};
 
 	if (!queue_try_add(&event_queue, &ev)) {
-		return TCP_COMM_RSP_ERR;
+		return STREAM_COMM_RSP_ERR;
 	}
 
-	return TCP_COMM_RSP_OK;
+	return STREAM_COMM_RSP_OK;
 }
 
 struct comm_command go_cmd = {
@@ -598,9 +599,9 @@ static uint32_t handle_info(uint32_t const* const args_in, uint8_t const* const 
 	resp_args_out[1] = (XIP_BASE + PICO_FLASH_SIZE_BYTES) - WRITE_ADDR_MIN;
 	resp_args_out[2] = FLASH_SECTOR_SIZE;
 	resp_args_out[3] = FLASH_PAGE_SIZE;
-	resp_args_out[4] = TCP_COMM_MAX_DATA_LEN;
+	resp_args_out[4] = STREAM_COMM_MAX_DATA_LEN;
 
-	return TCP_COMM_RSP_OK;
+	return STREAM_COMM_RSP_OK;
 }
 
 const struct comm_command info_cmd = {
@@ -621,9 +622,9 @@ static uint32_t handle_info_boot(uint32_t const* const args_in, uint8_t const* c
 	resp_args_out[2] = IMAGE_HEADER_OFFSET;
 	resp_args_out[3] = FLASH_SECTOR_SIZE;
 	resp_args_out[4] = FLASH_PAGE_SIZE;
-	resp_args_out[5] = TCP_COMM_MAX_DATA_LEN;
+	resp_args_out[5] = STREAM_COMM_MAX_DATA_LEN;
 
-	return TCP_COMM_RSP_OK;
+	return STREAM_COMM_RSP_OK;
 }
 
 const struct comm_command info_boot_cmd = {
@@ -647,10 +648,10 @@ static uint32_t handle_reboot(uint32_t const* const args_in, uint8_t const* cons
 
 	if (!queue_try_add(&event_queue, &ev)) {
 		DBG_PRINTF("failed to enqueue reboot\n");
-		return TCP_COMM_RSP_ERR;
+		return STREAM_COMM_RSP_ERR;
 	}
 
-	return TCP_COMM_RSP_OK;
+	return STREAM_COMM_RSP_OK;
 }
 
 struct comm_command reboot_cmd = {
@@ -674,18 +675,51 @@ static bool should_stay_in_bootloader()
 	return wd_says_so;
 }
 
+#if PICOWOTA_TCP
+static struct tcp_comm_ctx *g_tcp_server;
+#endif
+
 static void network_deinit()
 {
-#if PICOWOTA_WIFI_AP == 1
+#if PICOWOTA_TCP
+	tcp_comm_server_close(g_tcp_server);
+#endif
+#if PICOWOTA_WIFI_AP
 	dhcp_server_deinit(&dhcp_server);
 #endif
 	cyw43_arch_deinit();
 }
 
+static void pump_events() {
+	struct event ev;
+	while (queue_try_remove(&event_queue, &ev)) {
+		switch (ev.type) {
+		case EVENT_TYPE_SERVER_DONE: {
+#if PICOWOTA_TCP
+			err_t err = tcp_comm_listen(g_tcp_server, TCP_PORT);
+			if (err != ERR_OK) {
+				DBG_PRINTF("Failed to start server: %d\n", err);
+			}
+#endif
+		} break;
+		case EVENT_TYPE_REBOOT:
+			network_deinit();
+			picowota_reboot(ev.reboot.to_bootloader);
+			/* Should never get here */
+			break;
+		case EVENT_TYPE_GO:
+			network_deinit();
+			disable_interrupts();
+			reset_peripherals();
+			jump_to_vtor(ev.go.vtor);
+			/* Should never get here */
+			break;
+		};
+	}
+}
+
 int main()
 {
-	err_t err;
-
 #ifdef PICOWOTA_OTA_PIN
 	gpio_init(PICOWOTA_OTA_PIN);
 	gpio_pull_up(PICOWOTA_OTA_PIN);
@@ -712,7 +746,27 @@ int main()
 		return 1;
 	}
 
-#if PICOWOTA_WIFI_AP == 1
+	critical_section_init(&critical_section);
+
+	const struct comm_command *cmds[] = {
+		&erase_write_cmd,
+		&erase_write_boot_cmd,
+		&sync_cmd,
+#if PICOWOTA_ENABLE_READ
+		&read_cmd,
+#endif
+		&crc_cmd,
+		&erase_cmd,
+		&write_cmd,
+		&seal_cmd,
+		&go_cmd,
+		&info_cmd,
+		&info_boot_cmd,
+		&reboot_cmd,
+	};
+
+#if PICOWOTA_WIFI
+#if PICOWOTA_WIFI_AP
 	cyw43_arch_enable_ap_mode(wifi_ssid, wifi_pass, CYW43_AUTH_WPA2_AES_PSK);
 	DBG_PRINTF("Enabled the WiFi AP.\n");
 
@@ -734,27 +788,11 @@ int main()
 
 	DBG_PRINTF("Connected.\n");
 #endif
-
-	critical_section_init(&critical_section);
-
-	const struct comm_command *cmds[] = {
-		&erase_write_cmd,
-		&erase_write_boot_cmd,
-		&sync_cmd,
-#if PICOWOTA_ENABLE_READ
-		&read_cmd,
 #endif
-		&crc_cmd,
-		&erase_cmd,
-		&write_cmd,
-		&seal_cmd,
-		&go_cmd,
-		&info_cmd,
-		&info_boot_cmd,
-		&reboot_cmd,
-	};
 
-	struct tcp_comm_ctx *tcp = tcp_comm_new(cmds, sizeof(cmds) / sizeof(cmds[0]), CMD_SYNC);
+#if PICOWOTA_TCP
+	g_tcp_server = tcp_comm_new(cmds, sizeof(cmds) / sizeof(cmds[0]), CMD_SYNC);
+#endif
 
 	struct event ev = {
 		.type = EVENT_TYPE_SERVER_DONE,
@@ -763,35 +801,11 @@ int main()
 	queue_add_blocking(&event_queue, &ev);
 
 	for ( ; ; ) {
-		while (queue_try_remove(&event_queue, &ev)) {
-			switch (ev.type) {
-			case EVENT_TYPE_SERVER_DONE:
-				err = tcp_comm_listen(tcp, TCP_PORT);
-				if (err != ERR_OK) {
-					DBG_PRINTF("Failed to start server: %d\n", err);
-				}
-				break;
-			case EVENT_TYPE_REBOOT:
-				tcp_comm_server_close(tcp);
-				network_deinit();
-				picowota_reboot(ev.reboot.to_bootloader);
-				/* Should never get here */
-				break;
-			case EVENT_TYPE_GO:
-				tcp_comm_server_close(tcp);
-				network_deinit();
-				disable_interrupts();
-				reset_peripherals();
-				jump_to_vtor(ev.go.vtor);
-				/* Should never get here */
-				break;
-			};
-		}
-
+		pump_events();
 		cyw43_arch_poll();
 		sleep_ms(5);
 	}
 
-	network_deinit();
+	assert(false && "unreachable");
 	return 0;
 }

@@ -26,6 +26,8 @@
 #ifndef MICROPY_INCLUDED_LIB_NETUTILS_DHCPSERVER_H
 #define MICROPY_INCLUDED_LIB_NETUTILS_DHCPSERVER_H
 
+#if PICOWOTA_WIFI
+
 #include "lwip/ip_addr.h"
 
 #define DHCPS_BASE_IP (16)
@@ -45,5 +47,7 @@ typedef struct _dhcp_server_t {
 
 void dhcp_server_init(dhcp_server_t *d, ip_addr_t *ip, ip_addr_t *nm);
 void dhcp_server_deinit(dhcp_server_t *d);
+
+#endif
 
 #endif // MICROPY_INCLUDED_LIB_NETUTILS_DHCPSERVER_H

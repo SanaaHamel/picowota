@@ -39,7 +39,8 @@ pico_sdk_init()
 
 add_executable(picowota
 	main.c
-	tcp_comm.c
+	comm_stream.c
+	comm_tcp.c
 	dhcpserver/dhcpserver.c
 )
 
@@ -79,7 +80,7 @@ target_link_libraries(picowota
 	hardware_flash
 	hardware_resets
 	hardware_structs
-	pico_cyw43_arch_lwip_poll
+	pico_cyw43_arch_poll
 	pico_stdlib
 	pico_sync
 	pico_util
@@ -105,26 +106,49 @@ picowota_retrieve_variable(PICOWOTA_WIFI_SSID false)
 picowota_retrieve_variable(PICOWOTA_WIFI_PASS true)
 picowota_retrieve_variable(PICOWOTA_WIFI_AP false)
 picowota_retrieve_variable(PICOWOTA_OTA_PIN false)
+picowota_retrieve_variable(PICOWOTA_TCP false)
 
-if((NOT PICOWOTA_WIFI_SSID) OR(NOT PICOWOTA_WIFI_PASS))
-	message(FATAL_ERROR
-		"WiFi SSID/Pass not set, please set PICOWOTA_WIFI_SSID/PICOWOTA_WIFI_PASS."
-	)
+# default on for TCP
+if(NOT DEFINED PICOWOTA_TCP)
+	set(PICOWOTA_TCP 1)
 endif()
 
-# TODO: This causes a full rebuild if they change, configure_file might
-# be better.
-target_compile_definitions(picowota PUBLIC PICOWOTA_WIFI_SSID=${PICOWOTA_WIFI_SSID})
-target_compile_definitions(picowota PUBLIC PICOWOTA_WIFI_PASS=${PICOWOTA_WIFI_PASS})
+# If any transport requires WiFi, add it here.
+if(PICOWOTA_TCP)
+	set(PICOWOTA_WIFI 1)
+else()
+	set(PICOWOTA_WIFI 0)
+endif()
+
+target_compile_definitions(picowota PUBLIC CYW43_LWIP=${PICOWOTA_WIFI})
+
+if(PICOWOTA_WIFI)
+	if((NOT PICOWOTA_WIFI_SSID) OR(NOT PICOWOTA_WIFI_PASS))
+		message(FATAL_ERROR
+			"WiFi SSID/Pass not set, please set PICOWOTA_WIFI_SSID/PICOWOTA_WIFI_PASS."
+		)
+	endif()
+
+	# TODO: This causes a full rebuild if they change, configure_file might
+	# be better.
+	target_compile_definitions(picowota PUBLIC PICOWOTA_WIFI_SSID=${PICOWOTA_WIFI_SSID})
+	target_compile_definitions(picowota PUBLIC PICOWOTA_WIFI_PASS=${PICOWOTA_WIFI_PASS})
+
+	target_link_libraries(picowota pico_cyw43_arch_lwip_poll)
+
+	# Use the WiFi AP mode upon request
+	if(PICOWOTA_WIFI_AP)
+		target_compile_definitions(picowota PUBLIC PICOWOTA_WIFI_AP=1)
+		message("Building in WiFi AP mode.")
+	endif()
+endif()
 
 if(DEFINED PICOWOTA_OTA_PIN)
 	target_compile_definitions(picowota PUBLIC PICOWOTA_OTA_PIN=${PICOWOTA_OTA_PIN})
 endif()
 
-# Use the WiFi AP mode upon request
-if(PICOWOTA_WIFI_AP)
-	target_compile_definitions(picowota PUBLIC PICOWOTA_WIFI_AP=1)
-	message("Building in WiFi AP mode.")
+if(PICOWOTA_TCP)
+	target_compile_definitions(picowota PUBLIC PICOWOTA_TCP=${PICOWOTA_TCP})
 endif()
 
 # Provide a helper to build a standalone target
