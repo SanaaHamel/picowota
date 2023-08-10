@@ -70,10 +70,10 @@ const char *wifi_pass = STR(PICOWOTA_WIFI_PASS);
 #endif
 #endif
 
-critical_section_t critical_section;
+static critical_section_t critical_section;
 
 #define EVENT_QUEUE_LENGTH 8
-queue_t event_queue;
+static queue_t event_queue;
 
 enum event_type {
 	EVENT_TYPE_REBOOT = 1,
