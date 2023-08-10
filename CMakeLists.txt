@@ -39,6 +39,7 @@ pico_sdk_init()
 
 add_executable(picowota
 	main.c
+	comm_bt_spp.c
 	comm_stream.c
 	comm_tcp.c
 	dhcpserver/dhcpserver.c
@@ -106,6 +107,7 @@ picowota_retrieve_variable(PICOWOTA_WIFI_SSID false)
 picowota_retrieve_variable(PICOWOTA_WIFI_PASS true)
 picowota_retrieve_variable(PICOWOTA_WIFI_AP false)
 picowota_retrieve_variable(PICOWOTA_OTA_PIN false)
+picowota_retrieve_variable(PICOWOTA_BT_SPP false)
 picowota_retrieve_variable(PICOWOTA_TCP false)
 
 # default on for TCP
@@ -120,6 +122,26 @@ else()
 	set(PICOWOTA_WIFI 0)
 endif()
 
+# If any transport requires Bluetooth classic add it here
+if(PICOWOTA_BT_SPP)
+	set(PICOWOTA_BLUETOOTH_CLASSIC 1)
+else()
+	set(PICOWOTA_BLUETOOTH_CLASSIC 0)
+endif()
+
+# If any transport requires Bluetooth classic add it here
+set(PICOWOTA_BLUETOOTH_LE 0)
+
+if(PICOWOTA_BLUETOOTH_CLASSIC OR PICOWOTA_BLUETOOTH_LE)
+	set(PICOWOTA_BLUETOOTH 1)
+else()
+	set(PICOWOTA_BLUETOOTH 0)
+endif()
+
+target_compile_definitions(picowota PUBLIC PICOWOTA_BLUETOOTH=${PICOWOTA_BLUETOOTH})
+target_compile_definitions(picowota PUBLIC PICOWOTA_BT_SPP=${PICOWOTA_BT_SPP})
+target_compile_definitions(picowota PUBLIC PICOWOTA_TCP=${PICOWOTA_TCP})
+target_compile_definitions(picowota PUBLIC PICOWOTA_WIFI=${PICOWOTA_WIFI})
 target_compile_definitions(picowota PUBLIC CYW43_LWIP=${PICOWOTA_WIFI})
 
 if(PICOWOTA_WIFI)
@@ -147,8 +169,12 @@ if(DEFINED PICOWOTA_OTA_PIN)
 	target_compile_definitions(picowota PUBLIC PICOWOTA_OTA_PIN=${PICOWOTA_OTA_PIN})
 endif()
 
-if(PICOWOTA_TCP)
-	target_compile_definitions(picowota PUBLIC PICOWOTA_TCP=${PICOWOTA_TCP})
+if(PICOWOTA_BLUETOOTH_CLASSIC)
+	target_link_libraries(picowota pico_btstack_cyw43 pico_btstack_classic)
+endif()
+
+if(PICOWOTA_BLUETOOTH_LE)
+	target_link_libraries(picowota pico_btstack_cyw43 pico_btstack_le)
 endif()
 
 # Provide a helper to build a standalone target

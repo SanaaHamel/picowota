@@ -27,10 +27,15 @@
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
 
+#include "comm_bt_spp.h"
 #include "comm_stream.h"
 #include "comm_tcp.h"
 
 #include "picowota/reboot.h"
+
+#if PICOWOTA_BLUETOOTH
+#include "btstack_run_loop.h"
+#endif
 
 static_assert(sizeof(uint32_t) < sizeof(uint64_t), "need to fix overflow checks");
 
@@ -48,7 +53,7 @@ static_assert(sizeof(uint32_t) < sizeof(uint64_t), "need to fix overflow checks"
 #define DBG_PRINTF(...) { }
 #endif
 
-#if PICOWOTA_WIFI_AP == 1
+#if PICOWOTA_WIFI_AP
 #include "dhcpserver.h"
 static dhcp_server_t dhcp_server;
 #endif
@@ -681,6 +686,9 @@ static struct tcp_comm_ctx *g_tcp_server;
 
 static void network_deinit()
 {
+#if PICOWOTA_BT_SPP
+	bt_spp_comm_close();
+#endif
 #if PICOWOTA_TCP
 	tcp_comm_server_close(g_tcp_server);
 #endif
@@ -717,6 +725,15 @@ static void pump_events() {
 		};
 	}
 }
+
+#if PICOWOTA_BT_SPP
+static btstack_timer_source_t bt_pump_events_timer;
+static void bt_pump_events(btstack_timer_source_t* timer) {
+	pump_events();
+	btstack_run_loop_set_timer(timer, 5);
+	btstack_run_loop_add_timer(timer);
+}
+#endif
 
 int main()
 {
@@ -765,6 +782,13 @@ int main()
 		&reboot_cmd,
 	};
 
+#if PICOWOTA_BT_SPP
+	int ssp_err = bt_spp_comm_init(cmds, sizeof(cmds) / sizeof(cmds[0]), CMD_SYNC);
+	if (ssp_err) {
+		DBG_PRINTF("failed to init SPP err=%d\n", ssp_err);
+	}
+#endif
+
 #if PICOWOTA_WIFI
 #if PICOWOTA_WIFI_AP
 	cyw43_arch_enable_ap_mode(wifi_ssid, wifi_pass, CYW43_AUTH_WPA2_AES_PSK);
@@ -800,11 +824,17 @@ int main()
 
 	queue_add_blocking(&event_queue, &ev);
 
+#if PICOWOTA_BLUETOOTH
+	bt_pump_events_timer.process = &bt_pump_events;
+	bt_pump_events(&bt_pump_events_timer);
+	btstack_run_loop_execute();
+#else
 	for ( ; ; ) {
 		pump_events();
 		cyw43_arch_poll();
 		sleep_ms(5);
 	}
+#endif
 
 	assert(false && "unreachable");
 	return 0;
