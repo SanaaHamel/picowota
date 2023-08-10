@@ -115,6 +115,10 @@ if(NOT DEFINED PICOWOTA_TCP)
 	set(PICOWOTA_TCP 1)
 endif()
 
+if(NOT DEFINED PICOWOTA_BT_SPP)
+	set(PICOWOTA_BT_SPP 0)
+endif()
+
 # If any transport requires WiFi, add it here.
 if(PICOWOTA_TCP)
 	set(PICOWOTA_WIFI 1)
