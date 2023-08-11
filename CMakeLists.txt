@@ -59,10 +59,15 @@ target_link_options(picowota PRIVATE "LINKER:--gc-sections")
 # CWY43 drivers are very large. Can't fit them in RAM.
 # Good news is that we don't need it after the chip is init'd.
 # So long as the flash writes happen after that, we're okay.
-add_compile_definitions("CYW43_RESOURCE_ATTRIBUTE=__attribute__((aligned(4), section(\".flashdata.cyw43_firmware\")))")
+function(picowota_share_cyw43_firmware NAME)
+	target_compile_definitions(${NAME} PUBLIC "CYW43_RESOURCE_ATTRIBUTE=__attribute__((aligned(4), section(\".cyw43_firmware\")))")
+endfunction()
+
+picowota_share_cyw43_firmware(picowota)
 pico_set_binary_type(picowota copy_to_ram)
 get_target_property(PICOWOTA_SRC_DIR picowota SOURCE_DIR)
 pico_set_linker_script(picowota ${PICOWOTA_SRC_DIR}/bootloader_shell.ld)
+
 pico_add_extra_outputs(picowota)
 
 target_include_directories(picowota PRIVATE
@@ -87,6 +92,10 @@ target_link_libraries(picowota
 	pico_util
 	picowota_reboot
 )
+
+# causes the the bluetooth firmware to be linked in.
+# required b/c the app might be using the bluetooth firmware even if we aren't
+target_link_libraries(picowota pico_btstack_hci_transport_cyw43)
 
 # Retrieves build variables from the environment if present
 function(picowota_retrieve_variable name hidden)
@@ -183,9 +192,9 @@ endif()
 
 # Provide a helper to build a standalone target
 function(picowota_build_standalone NAME)
+	picowota_share_cyw43_firmware(${NAME})
 	get_target_property(PICOWOTA_SRC_DIR picowota SOURCE_DIR)
 	pico_set_linker_script(${NAME} ${PICOWOTA_SRC_DIR}/standalone.ld)
-	pico_add_bin_output(${NAME})
 endfunction()
 
 # Provide a helper to build a combined target
@@ -198,11 +207,20 @@ endfunction()
 # 3. Calculate the checksum of the app binary
 # 4. Update the header and binary sections in the ELF from 1.
 function(picowota_build_combined NAME)
-	set(APP_BIN ${CMAKE_CURRENT_BINARY_DIR}/${NAME}.bin)
+	set(APP_BIN_NAME $<IF:$<BOOL:$<TARGET_PROPERTY:${NAME},OUTPUT_NAME>>,$<TARGET_PROPERTY:${NAME},OUTPUT_NAME>,$<TARGET_PROPERTY:${NAME},NAME>>_without-cyw43-firmware-section.bin)
+	set(APP_BIN ${CMAKE_CURRENT_BINARY_DIR}/${APP_BIN_NAME})
 	set(APP_HDR_BIN ${CMAKE_CURRENT_BINARY_DIR}/${NAME}_hdr.bin)
 	set(COMBINED picowota_${NAME})
 	get_target_property(PICOWOTA_SRC_DIR picowota SOURCE_DIR)
 	get_target_property(PICOWOTA_BIN_DIR picowota BINARY_DIR)
+
+	# need a custom bin, one w/o the shared firmware
+	add_custom_command(TARGET ${NAME} POST_BUILD COMMAND ${CMAKE_OBJCOPY}
+		"--remove-section" ".cyw43_firmware"
+		"--output-target" "binary"
+		$<TARGET_FILE:${NAME}>
+		${APP_BIN}
+		VERBATIM)
 
 	# The app must be built with the correct linker script (and a .bin)
 	picowota_build_standalone(${NAME})

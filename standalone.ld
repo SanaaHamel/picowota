@@ -22,9 +22,16 @@
 */
 
 /* Skip 364kB at the start of flash, that's where the bootloader is */
+cyw43_len = 240k;
+bootloader_total_len = 360k;
+bootloader_len = bootloader_total_len - cyw43_len;
+app_header_len = 4k;
+app_img_offset = bootloader_total_len + app_header_len;
+
 MEMORY
 {
-    FLASH(rx) : ORIGIN = 0x10000000 + 364k, LENGTH = 2048k - 364k
+    FLASH_CYW43(r) : ORIGIN = 0x10000000 + bootloader_len, LENGTH = cyw43_len
+    FLASH(rx) : ORIGIN = 0x10000000 + app_img_offset, LENGTH = 2048k - app_img_offset
     RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 256k
     SCRATCH_X(rwx) : ORIGIN = 0x20040000, LENGTH = 4k
     SCRATCH_Y(rwx) : ORIGIN = 0x20041000, LENGTH = 4k
@@ -34,6 +41,12 @@ ENTRY(_entry_point)
 
 SECTIONS
 {
+    .cyw43_firmware : {
+        . = ALIGN(4);
+        KEEP (*(SORT_BY_ALIGNMENT(SORT_BY_NAME(.cyw43_firmware*))))
+        . = ALIGN(4);
+    } > FLASH_CYW43
+
     .flash_begin : {
         __flash_binary_start = .;
     } > FLASH
@@ -231,4 +244,3 @@ SECTIONS
     ASSERT( __binary_info_header_end - __logical_binary_start <= 256, "Binary info must be in first 256 bytes of the binary")
     /* todo assert on extra code */
 }
-

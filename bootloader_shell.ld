@@ -25,12 +25,20 @@
  * TODO: Hard-code 360k, which is the max size I see on my machine with
  * 'sta' mode and debug printf.
  * There must be a better way to determine the size dynamically somehow.
+ * NOTE: Current BT-enabled CYW43 firmware is ~236k. Reserve ~240k for now.
  */
+cyw43_len = 240k;
+bootloader_total_len = 360k;
+bootloader_len = bootloader_total_len - cyw43_len;
+app_header_len = 4k;
+app_img_offset = bootloader_total_len + app_header_len;
+
 MEMORY
 {
-    FLASH(rx) : ORIGIN = 0x10000000, LENGTH = 360k
-    FLASH_IMGHDR(rx) : ORIGIN = 0x10000000 + 360k, LENGTH = 4k
-    FLASH_APP(rx) : ORIGIN = 0x10000000 + 364k, LENGTH = 2048k - 364k
+    FLASH(rx) : ORIGIN = 0x10000000, LENGTH = bootloader_len
+    FLASH_CYW43(r) : ORIGIN = 0x10000000 + bootloader_len, LENGTH = cyw43_len
+    FLASH_IMGHDR(rx) : ORIGIN = 0x10000000 + bootloader_total_len, LENGTH = app_header_len
+    FLASH_APP(rx) : ORIGIN = 0x10000000 + app_img_offset, LENGTH = 2048k - app_img_offset
     RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 256k
     SCRATCH_X(rwx) : ORIGIN = 0x20040000, LENGTH = 4k
     SCRATCH_Y(rwx) : ORIGIN = 0x20041000, LENGTH = 4k
@@ -57,6 +65,12 @@ SECTIONS
 
     ASSERT(__boot2_end__ - __boot2_start__ == 256,
         "ERROR: Pico second stage bootloader must be 256 bytes in size")
+
+    .cyw43_firmware : {
+        . = ALIGN(4);
+        KEEP (*(SORT_BY_ALIGNMENT(SORT_BY_NAME(.cyw43_firmware*))))
+        . = ALIGN(4);
+    } > FLASH_CYW43
 
     /*
      * Name a section for the image header and app binary
