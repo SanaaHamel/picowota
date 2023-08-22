@@ -746,8 +746,7 @@ static void pump_events() {
 	}
 }
 
-#if PICOWOTA_BT_SPP
-static btstack_timer_source_t bt_pump_events_timer;
+#if PICOWOTA_BLUETOOTH
 static void bt_pump_events(btstack_timer_source_t* timer) {
 	pump_events();
 	btstack_run_loop_set_timer(timer, 5);
@@ -846,6 +845,7 @@ int main()
 	queue_add_blocking(&event_queue, &ev);
 
 #if PICOWOTA_BLUETOOTH
+	btstack_timer_source_t bt_pump_events_timer;
 	bt_pump_events_timer.process = &bt_pump_events;
 	bt_pump_events(&bt_pump_events_timer);
 	btstack_run_loop_execute();
