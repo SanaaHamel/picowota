@@ -25,6 +25,7 @@
 #include "hardware/watchdog.h"
 
 #include "pico/stdlib.h"
+#include "pico/time.h"
 #include "pico/cyw43_arch.h"
 
 #include "comm_bt_spp.h"
@@ -718,6 +719,45 @@ static void network_deinit()
 	cyw43_arch_deinit();
 }
 
+static absolute_time_t g_idle_timeout;
+
+static void reboot_if_idle_timeout() {
+	cyw43_arch_gpio_put(0, 0 < stream_comm_active());
+
+	if (0 < stream_comm_active()) {
+		g_idle_timeout = make_timeout_time_ms(PICOWOTA_IDLE_TIMEOUT_SEC * 1000);
+		return;
+	}
+
+	// timeout hasn't happened yet
+	if (to_us_since_boot(get_absolute_time()) < to_us_since_boot(g_idle_timeout)) return;
+
+#ifdef PICOWOTA_OTA_PIN
+	// suppress idle reboot when the bootloader pin is held low
+	if (!gpio_get(PICOWOTA_OTA_PIN)) return;
+#endif
+
+	// Never reboot if we've an invalid image.
+	struct image_header *hdr = (struct image_header *)(XIP_BASE + IMAGE_HEADER_OFFSET);
+	if (!image_header_ok(hdr)) {
+		// Image will never become valid w/o someone connecting and uploading a new
+		// image. Set the timeout to never to avoid wasting time re-validating the
+		// broken image.
+		DBG_PRINTF("idle timeout - image invalid, reboot suppressed\n");
+		g_idle_timeout = at_the_end_of_time;
+		return;
+	}
+
+	DBG_PRINTF("idle timeout - rebooting\n");
+	struct event ev = {
+		.type = EVENT_TYPE_REBOOT,
+		.reboot = { .to_bootloader = false },
+	};
+	if (!queue_try_add(&event_queue, &ev)) {
+		DBG_PRINTF("failed to enqueue reboot\n");
+	}
+}
+
 static void pump_events() {
 	struct event ev;
 	while (queue_try_remove(&event_queue, &ev)) {
@@ -744,6 +784,8 @@ static void pump_events() {
 			break;
 		};
 	}
+
+	reboot_if_idle_timeout();
 }
 
 #if PICOWOTA_BLUETOOTH
@@ -843,6 +885,8 @@ int main()
 	};
 
 	queue_add_blocking(&event_queue, &ev);
+
+	g_idle_timeout = make_timeout_time_ms(PICOWOTA_IDLE_TIMEOUT_SEC * 1000);
 
 #if PICOWOTA_BLUETOOTH
 	btstack_timer_source_t bt_pump_events_timer;

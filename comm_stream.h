@@ -82,3 +82,5 @@ void stream_comm_close(stream_comm_ctx *);
 uint8_t *stream_comm_recv_prepare(stream_comm_ctx *, size_t len);
 int stream_comm_recv_process(stream_comm_ctx *);
 int stream_comm_sent(stream_comm_ctx *, size_t len);
+
+uint32_t stream_comm_active();

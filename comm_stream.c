@@ -7,7 +7,6 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #include "comm_stream.h"
-#include "pico/cyw43_arch.h" // cyw43_arch_gpio_put
 #include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -25,6 +24,8 @@
 #define COMM_BUF_ARGS(_buf) ((uint32_t *)((uint8_t *)(_buf) + sizeof(uint32_t)))
 #define COMM_BUF_BODY(_buf, _nargs)                                            \
   ((uint8_t *)(_buf) + (sizeof(uint32_t) * ((_nargs) + 1)))
+
+static uint32_t g_streams_active = 0;
 
 static const struct comm_command *find_command_desc(stream_comm_ctx *ctx,
                                                     uint32_t opcode) {
@@ -315,13 +316,17 @@ void stream_comm_open(stream_comm_ctx *ctx) {
 
   stream_comm_sync_begin(ctx);
 
-  cyw43_arch_gpio_put(0, true);
+  g_streams_active++;
 }
 
 void stream_comm_close(stream_comm_ctx *ctx) {
   if (ctx->conn.state == CONN_STATE_CLOSED)
     return;
 
-  cyw43_arch_gpio_put(0, false);
   ctx->conn.state = CONN_STATE_CLOSED;
+
+  assert(0 < g_streams_active && "unbalanced");
+  g_streams_active--;
 }
+
+uint32_t stream_comm_active() { return g_streams_active; }

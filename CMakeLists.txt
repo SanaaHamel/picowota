@@ -89,6 +89,7 @@ target_link_libraries(picowota
 	pico_cyw43_arch_poll
 	pico_stdlib
 	pico_sync
+	pico_time
 	pico_util
 	picowota_reboot
 )
@@ -112,12 +113,18 @@ function(picowota_retrieve_variable name hidden)
 	endif()
 endfunction()
 
+picowota_retrieve_variable(PICOWOTA_IDLE_TIMEOUT_SEC false)
 picowota_retrieve_variable(PICOWOTA_WIFI_SSID false)
 picowota_retrieve_variable(PICOWOTA_WIFI_PASS true)
 picowota_retrieve_variable(PICOWOTA_WIFI_AP false)
 picowota_retrieve_variable(PICOWOTA_OTA_PIN false)
 picowota_retrieve_variable(PICOWOTA_BT_SPP false)
 picowota_retrieve_variable(PICOWOTA_TCP false)
+
+# default to 60 seconds
+if(NOT DEFINED PICOWOTA_IDLE_TIMEOUT_SEC)
+	set(PICOWOTA_IDLE_TIMEOUT_SEC 60)
+endif()
 
 # default on for TCP
 if(NOT DEFINED PICOWOTA_TCP)
@@ -151,8 +158,13 @@ else()
 	set(PICOWOTA_BLUETOOTH 0)
 endif()
 
+if(NOT (0 LESS PICOWOTA_IDLE_TIMEOUT_SEC))
+	message(FATAL_ERROR "`PICOWOTA_IDLE_TIMEOUT_SEC` must be > 0")
+endif()
+
 target_compile_definitions(picowota PUBLIC PICOWOTA_BLUETOOTH=${PICOWOTA_BLUETOOTH})
 target_compile_definitions(picowota PUBLIC PICOWOTA_BT_SPP=${PICOWOTA_BT_SPP})
+target_compile_definitions(picowota PUBLIC PICOWOTA_IDLE_TIMEOUT_SEC=${PICOWOTA_IDLE_TIMEOUT_SEC})
 target_compile_definitions(picowota PUBLIC PICOWOTA_TCP=${PICOWOTA_TCP})
 target_compile_definitions(picowota PUBLIC PICOWOTA_WIFI=${PICOWOTA_WIFI})
 target_compile_definitions(picowota PUBLIC CYW43_LWIP=${PICOWOTA_WIFI})
