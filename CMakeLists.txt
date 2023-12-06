@@ -102,6 +102,7 @@ target_link_libraries(picowota pico_btstack_hci_transport_cyw43)
 function(picowota_retrieve_variable name hidden)
 	if(DEFINED ENV{${name}} AND(NOT ${name}))
 		set(${name} $ENV{${name}} PARENT_SCOPE)
+		set(found_value true)
 
 		if(hidden)
 			set(log_value "hidden")
@@ -111,29 +112,26 @@ function(picowota_retrieve_variable name hidden)
 
 		message("Using ${name} from environment (${log_value})")
 	endif()
+
+	set(argn ${ARGN})
+	list(LENGTH argn argc)
+	if(${argc} EQUAL 1)
+		if(NOT DEFINED ${name} AND NOT DEFINED found_value)
+			list(GET argn 0 argn0)
+			set(${name} ${argn0} PARENT_SCOPE)
+		endif()
+	elseif(${argc} GREATER 1)
+		message(FATAL_ERROR "too many extra arguments")
+	endif()
 endfunction()
 
-picowota_retrieve_variable(PICOWOTA_IDLE_TIMEOUT_SEC false)
+picowota_retrieve_variable(PICOWOTA_IDLE_TIMEOUT_SEC false 60)
 picowota_retrieve_variable(PICOWOTA_WIFI_SSID false)
 picowota_retrieve_variable(PICOWOTA_WIFI_PASS true)
 picowota_retrieve_variable(PICOWOTA_WIFI_AP false)
 picowota_retrieve_variable(PICOWOTA_OTA_PIN false)
-picowota_retrieve_variable(PICOWOTA_BT_SPP false)
-picowota_retrieve_variable(PICOWOTA_TCP false)
-
-# default to 60 seconds
-if(NOT DEFINED PICOWOTA_IDLE_TIMEOUT_SEC)
-	set(PICOWOTA_IDLE_TIMEOUT_SEC 60)
-endif()
-
-# default on for TCP
-if(NOT DEFINED PICOWOTA_TCP)
-	set(PICOWOTA_TCP 1)
-endif()
-
-if(NOT DEFINED PICOWOTA_BT_SPP)
-	set(PICOWOTA_BT_SPP 0)
-endif()
+picowota_retrieve_variable(PICOWOTA_BT_SPP false 0)
+picowota_retrieve_variable(PICOWOTA_TCP false 1)
 
 # If any transport requires WiFi, add it here.
 if(PICOWOTA_TCP)
