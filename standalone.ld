@@ -115,8 +115,13 @@ SECTIONS
     /* End of .text-like segments */
     __etext = .;
 
-   .ram_vector_table (COPY): {
+    .ram_vector_table (NOLOAD): {
         *(.ram_vector_table)
+    } > RAM
+
+    .uninitialized_data (NOLOAD): {
+        . = ALIGN(4);
+        *(.uninitialized_data*)
     } > RAM
 
     .data : {
@@ -168,11 +173,6 @@ SECTIONS
         /* All data end */
         __data_end__ = .;
     } > RAM AT> FLASH
-
-    .uninitialized_data (COPY): {
-        . = ALIGN(4);
-        *(.uninitialized_data*)
-    } > RAM
 
     /* Start and end symbols must be word-aligned */
     .scratch_x : {
