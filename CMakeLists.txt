@@ -101,7 +101,11 @@ target_link_libraries(picowota pico_btstack_hci_transport_cyw43)
 # Retrieves build variables from the environment if present
 function(picowota_retrieve_variable name hidden)
 	if(DEFINED ENV{${name}} AND(NOT ${name}))
-		set(${name} $ENV{${name}} PARENT_SCOPE)
+		# HACK: `CACHE` so that it's visible in all scopes. same thing below.
+		# FIXME: This is fucking awful, will interact badly with default values
+		# changing and cached env vars, but I'm not being paid for this
+		# so whatever works.
+		set(${name} $ENV{${name}} CACHE INTERNAL "" FORCE)
 		set(found_value true)
 
 		if(hidden)
@@ -115,10 +119,13 @@ function(picowota_retrieve_variable name hidden)
 
 	set(argn ${ARGN})
 	list(LENGTH argn argc)
+
 	if(${argc} EQUAL 1)
 		if(NOT DEFINED ${name} AND NOT DEFINED found_value)
 			list(GET argn 0 argn0)
-			set(${name} ${argn0} PARENT_SCOPE)
+
+			# HACK: this `CACHE` is trash. see above.
+			set(${name} ${argn0} CACHE INTERNAL "" FORCE)
 		endif()
 	elseif(${argc} GREATER 1)
 		message(FATAL_ERROR "too many extra arguments")
@@ -132,6 +139,9 @@ picowota_retrieve_variable(PICOWOTA_WIFI_AP false)
 picowota_retrieve_variable(PICOWOTA_OTA_PIN false)
 picowota_retrieve_variable(PICOWOTA_BT_SPP false 0)
 picowota_retrieve_variable(PICOWOTA_TCP false 1)
+picowota_retrieve_variable(PICOWOTA_CYW43_SIZE false "240") # in KiB
+picowota_retrieve_variable(PICOWOTA_BOOTLOADER_SIZE false "120") # in KiB
+picowota_retrieve_variable(PICOWOTA_APP_STORE_SIZE false "0") # in KiB
 
 # If any transport requires WiFi, add it here.
 if(PICOWOTA_TCP)
@@ -156,9 +166,21 @@ else()
 	set(PICOWOTA_BLUETOOTH 0)
 endif()
 
-if(NOT (0 LESS PICOWOTA_IDLE_TIMEOUT_SEC))
+if(NOT(0 LESS PICOWOTA_IDLE_TIMEOUT_SEC))
 	message(FATAL_ERROR "`PICOWOTA_IDLE_TIMEOUT_SEC` must be > 0")
 endif()
+
+function(assert_4k_aligned NAME)
+	math(EXPR remainder "${${NAME}} % 4")
+
+	if(NOT(remainder EQUAL 0))
+		message(FATAL_ERROR "`${NAME}` must be 4 KiB aligned")
+	endif()
+endfunction()
+
+assert_4k_aligned("PICOWOTA_CYW43_SIZE")
+assert_4k_aligned("PICOWOTA_BOOTLOADER_SIZE")
+assert_4k_aligned("PICOWOTA_APP_STORE_SIZE")
 
 target_compile_definitions(picowota PUBLIC PICOWOTA_BLUETOOTH=${PICOWOTA_BLUETOOTH})
 target_compile_definitions(picowota PUBLIC PICOWOTA_BT_SPP=${PICOWOTA_BT_SPP})
@@ -166,6 +188,14 @@ target_compile_definitions(picowota PUBLIC PICOWOTA_IDLE_TIMEOUT_SEC=${PICOWOTA_
 target_compile_definitions(picowota PUBLIC PICOWOTA_TCP=${PICOWOTA_TCP})
 target_compile_definitions(picowota PUBLIC PICOWOTA_WIFI=${PICOWOTA_WIFI})
 target_compile_definitions(picowota PUBLIC CYW43_LWIP=${PICOWOTA_WIFI})
+
+function(picowota_set_linker_defs NAME)
+	target_link_options(${NAME} PUBLIC "LINKER:--defsym=cyw43_len=${PICOWOTA_CYW43_SIZE}k")
+	target_link_options(${NAME} PUBLIC "LINKER:--defsym=bootloader_len=${PICOWOTA_BOOTLOADER_SIZE}k")
+	target_link_options(${NAME} PUBLIC "LINKER:--defsym=app_store_len=${PICOWOTA_APP_STORE_SIZE}k")
+endfunction()
+
+picowota_set_linker_defs(picowota)
 
 if(PICOWOTA_WIFI)
 	if((NOT PICOWOTA_WIFI_SSID) OR(NOT PICOWOTA_WIFI_PASS))
@@ -200,11 +230,25 @@ if(PICOWOTA_BLUETOOTH_LE)
 	target_link_libraries(picowota pico_btstack_cyw43 pico_btstack_le)
 endif()
 
+function(picowota_app_store_declare NAME)
+	math(EXPR in_bytes "${PICOWOTA_APP_STORE_SIZE} * 1024" OUTPUT_FORMAT HEXADECIMAL)
+	target_compile_definitions(${NAME} PUBLIC PICOWOTA_APP_STORE_SIZE=${in_bytes})
+endfunction()
+
+function(picowota_build_no_bootloader_with_app_store NAME)
+	get_target_property(PICOWOTA_SRC_DIR picowota SOURCE_DIR)
+	pico_set_linker_script(${NAME} ${PICOWOTA_SRC_DIR}/memmap_default_with_app_store.ld)
+	target_link_options(${NAME} PUBLIC "LINKER:--defsym=app_store_len=${PICOWOTA_APP_STORE_SIZE}k")
+	picowota_app_store_declare(${NAME})
+endfunction()
+
 # Provide a helper to build a standalone target
 function(picowota_build_standalone NAME)
+	picowota_app_store_declare(${NAME})
 	picowota_share_cyw43_firmware(${NAME})
 	get_target_property(PICOWOTA_SRC_DIR picowota SOURCE_DIR)
 	pico_set_linker_script(${NAME} ${PICOWOTA_SRC_DIR}/standalone.ld)
+	picowota_set_linker_defs(${NAME})
 endfunction()
 
 # Provide a helper to build a combined target
@@ -235,13 +279,15 @@ function(picowota_build_combined NAME)
 	# The app must be built with the correct linker script (and a .bin)
 	picowota_build_standalone(${NAME})
 
-	# Build the bootloader with the sections to fill in
-	pico_set_linker_script(picowota ${PICOWOTA_SRC_DIR}/bootloader_shell.ld)
-
 	# TODO: The hard-coded address here is a bit nasty
 	add_custom_target(${NAME}_hdr DEPENDS ${NAME})
+
+	# default entry point is the beginning of the app image
+	# i.e. bootloader + CYW43 + app header + app storage
+	math(EXPR header_vtor "0x10000000 + (${PICOWOTA_BOOTLOADER_SIZE} + ${PICOWOTA_CYW43_SIZE} + 4) * 1024" OUTPUT_FORMAT HEXADECIMAL)
+	message("${NAME} hdr vtor ${header_vtor}")
 	add_custom_command(TARGET ${NAME}_hdr DEPENDS ${APP_BIN}
-		COMMAND ${PICOWOTA_SRC_DIR}/gen_imghdr.py -a 0x1005B000 ${APP_BIN} ${APP_HDR_BIN}
+		COMMAND ${PICOWOTA_SRC_DIR}/gen_imghdr.py -a ${header_vtor} ${APP_BIN} ${APP_HDR_BIN}
 	)
 
 	add_custom_target(${COMBINED} ALL)

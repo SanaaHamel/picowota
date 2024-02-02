@@ -7,11 +7,13 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 
 #include "RP2040.h"
 #include "boot/uf2.h"
+#include "hardware/regs/addressmap.h"
 #include "pico/critical_section.h"
 #include "pico/time.h"
 #include "pico/util/queue.h"
@@ -107,14 +109,23 @@ struct event {
 
 #define TCP_PORT 4242
 
-#define IMAGE_HEADER_OFFSET (360 * 1024)
+// set by linker
 
-#define BOOT_WRITE_ADDR_MIN (XIP_BASE)
-#define BOOT_WRITE_ADDR_MAX (XIP_BASE + IMAGE_HEADER_OFFSET)
+extern char PICOWOTA_BOOTLOADER_CYW43[];
+extern char PICOWOTA_BOOTLOADER_CYW43_END[];
+extern char PICOWOTA_APP_HEADER[];
+extern char PICOWOTA_APP_HEADER_END[];
+extern char PICOWOTA_APP_IMAGE[];
+extern char PICOWOTA_APP_IMAGE_END[];
 
-#define WRITE_ADDR_MIN (XIP_BASE + IMAGE_HEADER_OFFSET + FLASH_SECTOR_SIZE)
-#define ERASE_ADDR_MIN (XIP_BASE + IMAGE_HEADER_OFFSET)
-#define FLASH_ADDR_MAX (XIP_BASE + PICO_FLASH_SIZE_BYTES)
+#define IMAGE_HEADER_OFFSET (((unsigned)&PICOWOTA_APP_HEADER) - XIP_BASE)
+
+#define BOOT_WRITE_ADDR_MIN ((unsigned)&PICOWOTA_BOOTLOADER_CYW43)
+#define BOOT_WRITE_ADDR_MAX ((unsigned)&PICOWOTA_BOOTLOADER_CYW43_END)
+
+#define WRITE_ADDR_MIN ((unsigned)&PICOWOTA_APP_IMAGE)
+#define ERASE_ADDR_MIN ((unsigned)&PICOWOTA_APP_IMAGE)
+#define FLASH_ADDR_MAX ((unsigned)&PICOWOTA_APP_IMAGE_END)
 
 #define CMD_SYNC          (('S' << 0) | ('Y' << 8) | ('N' << 16) | ('C' << 24))
 #define RSP_SYNC          (('W' << 0) | ('o' << 8) | ('T' << 16) | ('a' << 24))
@@ -536,11 +547,12 @@ static uint32_t handle_seal(uint32_t const* const args_in, uint8_t const* const 
 	}
 
 	critical_section_enter_blocking(&critical_section);
+	static_assert(sizeof(hdr) <= FLASH_SECTOR_SIZE);
 	flash_range_erase(IMAGE_HEADER_OFFSET, FLASH_SECTOR_SIZE);
 	flash_range_program(IMAGE_HEADER_OFFSET, (const uint8_t *)&hdr, sizeof(hdr));
 	critical_section_exit(&critical_section);
 
-	struct image_header *check = (struct image_header *)(XIP_BASE + IMAGE_HEADER_OFFSET);
+	struct image_header *check = (struct image_header *)PICOWOTA_APP_HEADER;
 	if (memcmp(&hdr, check, sizeof(hdr))) {
 		DBG_PRINTF("failed post-flash check\n");
 		return STREAM_COMM_RSP_ERR;
@@ -619,13 +631,19 @@ struct comm_command go_cmd = {
 	.handle = &handle_go,
 };
 
-static uint32_t handle_info(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
+// populates the addr, size, erase-size, write-size, and chunk-size fields
+static void handle_info_ex(uint32_t const addr_min, uint32_t const addr_max, uint32_t* const resp_args_out/*[5]*/)
 {
-	resp_args_out[0] = WRITE_ADDR_MIN;
-	resp_args_out[1] = (XIP_BASE + PICO_FLASH_SIZE_BYTES) - WRITE_ADDR_MIN;
+	resp_args_out[0] = addr_min;
+	resp_args_out[1] = addr_max - addr_min;
 	resp_args_out[2] = FLASH_SECTOR_SIZE;
 	resp_args_out[3] = FLASH_PAGE_SIZE;
 	resp_args_out[4] = STREAM_COMM_MAX_DATA_LEN;
+}
+
+static uint32_t handle_info(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
+{
+	handle_info_ex(WRITE_ADDR_MIN, FLASH_ADDR_MAX, resp_args_out);
 
 	return STREAM_COMM_RSP_OK;
 }
@@ -644,11 +662,7 @@ const struct comm_command info_cmd = {
 static uint32_t handle_info_boot(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
 	resp_args_out[0] = RP2040_FAMILY_ID;
-	resp_args_out[1] = XIP_BASE;
-	resp_args_out[2] = IMAGE_HEADER_OFFSET;
-	resp_args_out[3] = FLASH_SECTOR_SIZE;
-	resp_args_out[4] = FLASH_PAGE_SIZE;
-	resp_args_out[5] = STREAM_COMM_MAX_DATA_LEN;
+	handle_info_ex(BOOT_WRITE_ADDR_MIN, BOOT_WRITE_ADDR_MAX, resp_args_out + 1);
 
 	return STREAM_COMM_RSP_OK;
 }
@@ -736,7 +750,7 @@ static void reboot_if_idle_timeout() {
 #endif
 
 	// Never reboot if we've an invalid image.
-	struct image_header *hdr = (struct image_header *)(XIP_BASE + IMAGE_HEADER_OFFSET);
+	struct image_header *hdr = (struct image_header *)PICOWOTA_APP_HEADER;
 	if (!image_header_ok(hdr)) {
 		// Image will never become valid w/o someone connecting and uploading a new
 		// image. Set the timeout to never to avoid wasting time re-validating the
@@ -804,17 +818,15 @@ int main()
 
 	sleep_ms(10);
 #endif
+	DBG_PRINTF_INIT();
 
-	struct image_header *hdr = (struct image_header *)(XIP_BASE + IMAGE_HEADER_OFFSET);
+	struct image_header *hdr = (struct image_header *)PICOWOTA_APP_HEADER;
 
 	if (!should_stay_in_bootloader() && image_header_ok(hdr)) {
-		uint32_t vtor = *((uint32_t *)(XIP_BASE + IMAGE_HEADER_OFFSET));
 		disable_interrupts();
 		reset_peripherals();
-		jump_to_vtor(vtor);
+		jump_to_vtor(hdr->vtor);
 	}
-
-	DBG_PRINTF_INIT();
 
 	queue_init(&event_queue, sizeof(struct event), EVENT_QUEUE_LENGTH);
 

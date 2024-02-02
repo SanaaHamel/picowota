@@ -21,6 +21,7 @@ There's an example project using picowota at https://github.com/usedbytes/picowo
 * lazy updating
 * shared CYW43 firmware (saves ~300kb)
 * reboot on idle timeout
+* app storage for persistent data (optional)
 
 Shared firmware is enabled for all targets marked with
 `picowota_build_standalone` or `picowota_build_combined`, but if the build is

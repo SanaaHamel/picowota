@@ -1,3 +1,9 @@
+/**
+ * Should be identical to Pico SDK's `memmap_default.ld` except we carve out a
+ * chunk at the end for app storage.
+ * This is **NOT** layout compatible with bootloader variants.
+ */
+
 /* Based on GCC ARM embedded samples.
    Defines the following symbols for use by code:
     __exidx_start
@@ -21,42 +27,43 @@
     __stack (== StackTop)
 */
 
-app_header_len      = 4k;
-cyw43_offset        = bootloader_len;
-app_header_offset   = cyw43_offset      + cyw43_len;
-app_image_offset    = app_header_offset + app_header_len;
-app_store_offset    = 2048k             - app_store_len;
-
 MEMORY
 {
-    FLASH_CYW43(r)      : ORIGIN = 0x10000000 + cyw43_offset        , LENGTH = cyw43_len
-    FLASH(rx)           : ORIGIN = 0x10000000 + app_image_offset    , LENGTH = 2048k - app_image_offset - app_store_len
-    FLASH_APP_STORE(rw) : ORIGIN = 0x10000000 + app_store_offset    , LENGTH = app_store_len
-    RAM(rwx)            : ORIGIN = 0x20000000, LENGTH = 256k
-    SCRATCH_X(rwx)      : ORIGIN = 0x20040000, LENGTH = 4k
-    SCRATCH_Y(rwx)      : ORIGIN = 0x20041000, LENGTH = 4k
+    FLASH(rx)           : ORIGIN = 0x10000000                           , LENGTH = 2048k - app_store_len
+    FLASH_APP_STORE(rw) : ORIGIN = 0x10000000 + 2048k - app_store_len   , LENGTH =         app_store_len
+    RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 256k
+    SCRATCH_X(rwx) : ORIGIN = 0x20040000, LENGTH = 4k
+    SCRATCH_Y(rwx) : ORIGIN = 0x20041000, LENGTH = 4k
 }
 
 ENTRY(_entry_point)
 
 SECTIONS
 {
-    .cyw43_firmware : {
-        . = ALIGN(4);
-        KEEP (*(SORT_BY_ALIGNMENT(SORT_BY_NAME(.cyw43_firmware*))))
-        . = ALIGN(4);
-    } > FLASH_CYW43
-
-    .picowota_app_store : {
-        . = ALIGN(4k);
-        PICOWOTA_APP_STORE = .;
-    } > FLASH_APP_STORE
+    /* Second stage bootloader is prepended to the image. It must be 256 bytes big
+       and checksummed. It is usually built by the boot_stage2 target
+       in the Raspberry Pi Pico SDK
+    */
 
     .flash_begin : {
         __flash_binary_start = .;
     } > FLASH
 
-    /* boot2 would normally go here, but we don't want it */
+    .boot2 : {
+        __boot2_start__ = .;
+        KEEP (*(.boot2))
+        __boot2_end__ = .;
+    } > FLASH
+
+    ASSERT(__boot2_end__ - __boot2_start__ == 256,
+        "ERROR: Pico second stage bootloader must be 256 bytes in size")
+
+    /* The second stage will always enter the image at the start of .text.
+       The debugger will use the ELF entry point, which is the _entry_point
+       symbol if present, otherwise defaults to start of .text.
+       This can be used to transfer control back to the bootrom on debugger
+       launches only, to perform proper flash setup.
+    */
 
     .text : {
         __logical_binary_start = .;
@@ -117,8 +124,10 @@ SECTIONS
     __binary_info_end = .;
     . = ALIGN(4);
 
-    /* End of .text-like segments */
-    __etext = .;
+    .picowota_app_store : {
+        . = ALIGN(4k);
+        PICOWOTA_APP_STORE = .;
+    } > FLASH_APP_STORE
 
     .ram_vector_table (NOLOAD): {
         *(.ram_vector_table)
@@ -178,6 +187,8 @@ SECTIONS
         /* All data end */
         __data_end__ = .;
     } > RAM AT> FLASH
+    /* __etext is (for backwards compatibility) the name of the .data init source pointer (...) */
+    __etext = LOADADDR(.data);
 
     /* Start and end symbols must be word-aligned */
     .scratch_x : {
@@ -205,11 +216,11 @@ SECTIONS
         __bss_end__ = .;
     } > RAM
 
-    .heap (COPY):
+    .heap (NOLOAD):
     {
         __end__ = .;
         end = __end__;
-        *(.heap*)
+        KEEP(*(.heap*))
         __HeapLimit = .;
     } > RAM
 
@@ -222,17 +233,17 @@ SECTIONS
     /* by default we put core 0 stack at the end of scratch Y, so that if core 1
      * stack is not used then all of SCRATCH_X is free.
      */
-    .stack1_dummy (COPY):
+    .stack1_dummy (NOLOAD):
     {
         *(.stack1*)
     } > SCRATCH_X
-    .stack_dummy (COPY):
+    .stack_dummy (NOLOAD):
     {
-        *(.stack*)
+        KEEP(*(.stack*))
     } > SCRATCH_Y
 
     .flash_end : {
-        __flash_binary_end = .;
+        PROVIDE(__flash_binary_end = .);
     } > FLASH
 
     PICOWOTA_APP_STORE_END = ORIGIN(FLASH_APP_STORE) + LENGTH(FLASH_APP_STORE);

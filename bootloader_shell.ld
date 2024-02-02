@@ -22,26 +22,38 @@
 */
 
 /*
+    Layout is as follows:
+
+    0x10000000  bootloader
+                CYW43 firmware
+                app header
+                app image
+                app storage (may be 0 sized)
+    0x20000000  RAM
+*/
+
+/*
  * TODO: Hard-code 360k, which is the max size I see on my machine with
  * 'sta' mode and debug printf.
  * There must be a better way to determine the size dynamically somehow.
  * NOTE: Current BT-enabled CYW43 firmware is ~236k. Reserve ~240k for now.
  */
-cyw43_len = 240k;
-bootloader_total_len = 360k;
-bootloader_len = bootloader_total_len - cyw43_len;
-app_header_len = 4k;
-app_img_offset = bootloader_total_len + app_header_len;
+app_header_len      = 4k;
+cyw43_offset        = bootloader_len;
+app_header_offset   = cyw43_offset      + cyw43_len;
+app_image_offset    = app_header_offset + app_header_len;
+app_store_offset    = 2048k             - app_store_len;
 
 MEMORY
 {
-    FLASH(rx) : ORIGIN = 0x10000000, LENGTH = bootloader_len
-    FLASH_CYW43(r) : ORIGIN = 0x10000000 + bootloader_len, LENGTH = cyw43_len
-    FLASH_IMGHDR(rx) : ORIGIN = 0x10000000 + bootloader_total_len, LENGTH = app_header_len
-    FLASH_APP(rx) : ORIGIN = 0x10000000 + app_img_offset, LENGTH = 2048k - app_img_offset
-    RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 256k
-    SCRATCH_X(rwx) : ORIGIN = 0x20040000, LENGTH = 4k
-    SCRATCH_Y(rwx) : ORIGIN = 0x20041000, LENGTH = 4k
+    FLASH(rx)           : ORIGIN = 0x10000000                       , LENGTH = bootloader_len
+    FLASH_CYW43(r)      : ORIGIN = 0x10000000 + cyw43_offset        , LENGTH = cyw43_len
+    FLASH_APP_HEADER(rx): ORIGIN = 0x10000000 + app_header_offset   , LENGTH = app_header_len
+    FLASH_APP_IMAGE(rx) : ORIGIN = 0x10000000 + app_image_offset    , LENGTH = 2048k - app_image_offset - app_store_len
+    FLASH_APP_STORE(rw) : ORIGIN = 0x10000000 + app_store_offset    , LENGTH = app_store_len
+    RAM(rwx)            : ORIGIN = 0x20000000, LENGTH = 256k
+    SCRATCH_X(rwx)      : ORIGIN = 0x20040000, LENGTH = 4k
+    SCRATCH_Y(rwx)      : ORIGIN = 0x20041000, LENGTH = 4k
 }
 
 ENTRY(_entry_point)
@@ -55,6 +67,7 @@ SECTIONS
 
     .flash_begin : {
         __flash_binary_start = .;
+        PICOWOTA_BOOTLOADER_CYW43 = .;
     } > FLASH
 
     .boot2 : {
@@ -72,23 +85,29 @@ SECTIONS
         . = ALIGN(4);
     } > FLASH_CYW43
 
+    /* nothing in here for the bootloader shell; this is reserved for the app */
+    .picowota_app_store : {
+        . = ALIGN(4k);
+        PICOWOTA_APP_STORE = .;
+    } > FLASH_APP_STORE
+
     /*
      * Name a section for the image header and app binary
      * In combined builds, the contents will get replaced post-build
      */
     .app_hdr : {
         . = ALIGN(4k);
-	__app_hdr = .;
-	LONG(0xdeaddead)
-	LONG(0)
-	LONG(0xdeaddead)
-    } > FLASH_IMGHDR
+        PICOWOTA_APP_HEADER = .;
+        LONG(0xdeaddead)
+        LONG(0)
+        LONG(0xdeaddead)
+    } > FLASH_APP_HEADER
 
     .app_bin : {
         . = ALIGN(4k);
-	__app_bin = .;
-	LONG(0)
-    } > FLASH_APP
+        PICOWOTA_APP_IMAGE = .;
+        LONG(0)
+    } > FLASH_APP_IMAGE
 
     /* The second stage will always enter the image at the start of .text.
        The debugger will use the ELF entry point, which is the _entry_point
@@ -274,6 +293,12 @@ SECTIONS
     .flash_end : {
         __flash_binary_end = .;
     } > FLASH
+
+    /* ASSUME: bootloader & CYW43 are adjacent & contiguous */
+    PICOWOTA_BOOTLOADER_CYW43_END   = ORIGIN(FLASH) + LENGTH(FLASH) + LENGTH(FLASH_CYW43);
+    PICOWOTA_APP_HEADER_END         = ORIGIN(FLASH_APP_HEADER)  + LENGTH(FLASH_APP_HEADER);
+    PICOWOTA_APP_STORE_END          = ORIGIN(FLASH_APP_STORE)   + LENGTH(FLASH_APP_STORE);
+    PICOWOTA_APP_IMAGE_END          = ORIGIN(FLASH_APP_IMAGE)   + LENGTH(FLASH_APP_IMAGE);
 
     /* stack limit is poorly named, but historically is maximum heap ptr */
     __StackLimit = ORIGIN(RAM) + LENGTH(RAM);
