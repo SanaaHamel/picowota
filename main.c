@@ -722,8 +722,6 @@ static void network_deinit()
 static absolute_time_t g_idle_timeout;
 
 static void reboot_if_idle_timeout() {
-	cyw43_arch_gpio_put(0, 0 < stream_comm_active());
-
 	if (0 < stream_comm_active()) {
 		g_idle_timeout = make_timeout_time_ms(PICOWOTA_IDLE_TIMEOUT_SEC * 1000);
 		return;
@@ -785,6 +783,7 @@ static void pump_events() {
 		};
 	}
 
+	cyw43_arch_gpio_put(0, 0 < stream_comm_active());
 	reboot_if_idle_timeout();
 }
 
