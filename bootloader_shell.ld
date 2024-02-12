@@ -49,8 +49,7 @@ MEMORY
     FLASH(rx)           : ORIGIN = 0x10000000                       , LENGTH = bootloader_len
     FLASH_CYW43(r)      : ORIGIN = 0x10000000 + cyw43_offset        , LENGTH = cyw43_len
     FLASH_APP_HEADER(rx): ORIGIN = 0x10000000 + app_header_offset   , LENGTH = app_header_len
-    FLASH_APP_IMAGE(rx) : ORIGIN = 0x10000000 + app_image_offset    , LENGTH = 2048k - app_image_offset - app_store_len
-    FLASH_APP_STORE(rw) : ORIGIN = 0x10000000 + app_store_offset    , LENGTH = app_store_len
+    FLASH_APP_IMAGE(rx) : ORIGIN = 0x10000000 + app_image_offset    , LENGTH = 2048k - app_image_offset
     RAM(rwx)            : ORIGIN = 0x20000000, LENGTH = 256k
     SCRATCH_X(rwx)      : ORIGIN = 0x20040000, LENGTH = 4k
     SCRATCH_Y(rwx)      : ORIGIN = 0x20041000, LENGTH = 4k
@@ -84,12 +83,6 @@ SECTIONS
         KEEP (*(SORT_BY_ALIGNMENT(SORT_BY_NAME(.cyw43_firmware*))))
         . = ALIGN(4);
     } > FLASH_CYW43
-
-    /* nothing in here for the bootloader shell; this is reserved for the app */
-    .picowota_app_store : {
-        . = ALIGN(4k);
-        PICOWOTA_APP_STORE = .;
-    } > FLASH_APP_STORE
 
     /*
      * Name a section for the image header and app binary
@@ -297,7 +290,6 @@ SECTIONS
     /* ASSUME: bootloader & CYW43 are adjacent & contiguous */
     PICOWOTA_BOOTLOADER_CYW43_END   = ORIGIN(FLASH) + LENGTH(FLASH) + LENGTH(FLASH_CYW43);
     PICOWOTA_APP_HEADER_END         = ORIGIN(FLASH_APP_HEADER)  + LENGTH(FLASH_APP_HEADER);
-    PICOWOTA_APP_STORE_END          = ORIGIN(FLASH_APP_STORE)   + LENGTH(FLASH_APP_STORE);
     PICOWOTA_APP_IMAGE_END          = ORIGIN(FLASH_APP_IMAGE)   + LENGTH(FLASH_APP_IMAGE);
 
     /* stack limit is poorly named, but historically is maximum heap ptr */
