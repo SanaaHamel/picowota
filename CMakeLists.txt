@@ -77,7 +77,7 @@ target_include_directories(picowota PRIVATE
 # pico_enable_stdio_usb(picowota 1)
 pico_enable_stdio_uart(picowota 1)
 
-add_subdirectory(picowota_reboot)
+add_subdirectory(picowota_client)
 
 target_link_libraries(picowota
 	boot_uf2_headers
@@ -91,7 +91,7 @@ target_link_libraries(picowota
 	pico_sync
 	pico_time
 	pico_util
-	picowota_reboot
+	picowota_client
 )
 
 # causes the the bluetooth firmware to be linked in.

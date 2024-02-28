@@ -81,7 +81,7 @@ time, then `picowota` will stay in bootloader mode, ready to receive new app cod
 
 You can also return to the bootloader from your app code - for example when a
 button is pressed, or in response to some network request. The
-`picowota_reboot` library provides a `picowota_reboot(bool to_bootloader)`
+`picowota_client` library provides a `picowota_reboot(bool to_bootloader)`
 function, which your app can call to get back in to the bootloader.
 
 ```
