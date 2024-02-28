@@ -210,7 +210,7 @@ static int stream_comm_tx_complete(stream_comm_ctx *ctx) {
 }
 
 int stream_comm_sent(stream_comm_ctx *ctx, size_t len) {
-  DEBUG_printf("comm_server_sent %u\n", len);
+  // DEBUG_printf("comm_server_sent %u\n", len);
 
   assert(ctx->conn.tx_remaining <= len);
   if (len > ctx->conn.tx_remaining) {
@@ -233,7 +233,7 @@ int stream_comm_sent(stream_comm_ctx *ctx, size_t len) {
 
 // returns pointer to buffer for write, if no errors
 uint8_t *stream_comm_recv_prepare(stream_comm_ctx *ctx, size_t len) {
-  DEBUG_printf("stream_comm_recv_prepare %d\n", len);
+  // DEBUG_printf("stream_comm_recv_prepare %d\n", len);
   if (len <= 0)
     return ctx->conn.buf + ctx->conn.rx_start_offs +
            ctx->conn.rx_received; // boring/no-op
