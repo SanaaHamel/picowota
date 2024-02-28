@@ -91,7 +91,7 @@ static void packet_handler(uint8_t const packet_type, uint16_t const channel,
     if (channel == g_spp_comm_ctx.rfcomm_cid) {
       uint8_t *const dst = stream_comm_recv_prepare(&g_spp_comm_ctx.ctx, size);
       if (!dst) {
-        printf("ERR - SPP recv too much data: channel=%u, size=%u\n", channel,
+        DEBUG_printf("ERR - SPP recv too much data: channel=%u, size=%u\n", channel,
                size);
         rfcomm_disconnect(channel);
         break;
@@ -100,7 +100,7 @@ static void packet_handler(uint8_t const packet_type, uint16_t const channel,
       memcpy(dst, packet, size);
       int err = stream_comm_recv_process(&g_spp_comm_ctx.ctx);
       if (err) {
-        printf("SPP disconnected, status=%d\n", err);
+        DEBUG_printf("SPP disconnected, status=%d\n", err);
         rfcomm_disconnect(channel);
         break;
       }
@@ -114,13 +114,13 @@ static void packet_handler(uint8_t const packet_type, uint16_t const channel,
       case HCI_STATE_WORKING: {
         bd_addr_t local_addr;
         gap_local_bd_addr(local_addr);
-        printf("BTstack up and running on %s\n", bd_addr_to_str(local_addr));
+        DEBUG_printf("BTstack up and running on %s\n", bd_addr_to_str(local_addr));
       } break;
       }
     } break;
 
     case HCI_EVENT_PIN_CODE_REQUEST: { // inform about pin code request
-      printf("Pin code request - using '0000'\n");
+      DEBUG_printf("Pin code request - using '0000'\n");
       bd_addr_t event_addr;
       hci_event_pin_code_request_get_bd_addr(packet, event_addr);
       gap_pin_code_response(event_addr, "0000");
@@ -128,15 +128,15 @@ static void packet_handler(uint8_t const packet_type, uint16_t const channel,
 
       // inform about user confirmation request
     case HCI_EVENT_USER_CONFIRMATION_REQUEST: {
-      printf("SSP User Confirmation Request with numeric value '%06u'\n",
+      DEBUG_printf("SSP User Confirmation Request with numeric value '%06u'\n",
              (unsigned)little_endian_read_32(packet, 8));
-      printf("SSP User Confirmation Auto accept\n");
+      DEBUG_printf("SSP User Confirmation Auto accept\n");
     } break;
 
     case RFCOMM_EVENT_INCOMING_CONNECTION: {
       bd_addr_t event_addr;
       rfcomm_event_incoming_connection_get_bd_addr(packet, event_addr);
-      printf("RFCOMM channel 0x%02x requested for %s\n",
+      DEBUG_printf("RFCOMM channel 0x%02x requested for %s\n",
              rfcomm_event_incoming_connection_get_server_channel(packet),
              bd_addr_to_str(event_addr));
       assert(rfcomm_event_incoming_connection_get_server_channel(packet) == 1);
@@ -146,12 +146,12 @@ static void packet_handler(uint8_t const packet_type, uint16_t const channel,
 
     case RFCOMM_EVENT_CHANNEL_OPENED: {
       if (rfcomm_event_channel_opened_get_status(packet)) {
-        printf("RFCOMM channel open failed, status 0x%02x\n",
+        DEBUG_printf("RFCOMM channel open failed, status 0x%02x\n",
                rfcomm_event_channel_opened_get_status(packet));
         break;
       }
 
-      printf("RFCOMM channel open succeeded. New RFCOMM Channel ID 0x%02x, "
+      DEBUG_printf("RFCOMM channel open succeeded. New RFCOMM Channel ID 0x%02x, "
              "max frame size %u\n",
              rfcomm_event_channel_opened_get_rfcomm_cid(packet),
              rfcomm_event_channel_opened_get_max_frame_size(packet));
@@ -178,7 +178,7 @@ static void packet_handler(uint8_t const packet_type, uint16_t const channel,
 
     case RFCOMM_EVENT_CHANNEL_CLOSED: {
       uint8_t const cid = rfcomm_event_channel_closed_get_rfcomm_cid(packet);
-      printf("RFCOMM channel closed cid=%d\n", cid);
+      DEBUG_printf("RFCOMM channel closed cid=%d\n", cid);
       assert(cid == g_spp_comm_ctx.rfcomm_cid);
       if (cid == g_spp_comm_ctx.rfcomm_cid) {
         stream_comm_close(&g_spp_comm_ctx.ctx);
