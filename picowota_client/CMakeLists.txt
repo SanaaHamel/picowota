@@ -6,6 +6,7 @@ target_include_directories(picowota_client INTERFACE
 
 target_sources(picowota_client INTERFACE
 	${CMAKE_CURRENT_LIST_DIR}/reboot.c
+	${CMAKE_CURRENT_LIST_DIR}/btstack_storage.c
 )
 
 target_link_libraries(picowota_client INTERFACE

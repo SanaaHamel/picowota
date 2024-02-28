@@ -17,7 +17,7 @@ There's an example project using picowota at https://github.com/usedbytes/picowo
 ## New Features Compared (Rel. to @usedbytes 's original)
 
 * updating bootloader
-* updating over BlueTooth
+* updating over BlueTooth (shared TLV storage)
 * lazy updating
 * shared CYW43 firmware (saves ~300kb)
 * reboot on idle timeout

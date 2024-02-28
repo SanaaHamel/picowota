@@ -21,17 +21,21 @@
     __stack (== StackTop)
 */
 
+flash_len           = 2048k;
 app_header_len      = 4k;
 cyw43_offset        = bootloader_len;
 app_header_offset   = cyw43_offset      + cyw43_len;
 app_image_offset    = app_header_offset + app_header_len;
-app_store_offset    = 2048k             - app_store_len;
+app_image_len       = flash_len - app_image_offset - app_store_len - bt_store_len;
+app_store_offset    = app_image_offset  + app_image_len;
+bt_store_offset     = app_store_offset  + bt_store_len;
 
 MEMORY
 {
     FLASH_CYW43(r)      : ORIGIN = 0x10000000 + cyw43_offset        , LENGTH = cyw43_len
-    FLASH(rx)           : ORIGIN = 0x10000000 + app_image_offset    , LENGTH = 2048k - app_image_offset - app_store_len
+    FLASH(rx)           : ORIGIN = 0x10000000 + app_image_offset    , LENGTH = app_image_len
     FLASH_APP_STORE(rw) : ORIGIN = 0x10000000 + app_store_offset    , LENGTH = app_store_len
+    FLASH_BT_STORE(rw)  : ORIGIN = 0x10000000 + bt_store_offset     , LENGTH = bt_store_len
     RAM(rwx)            : ORIGIN = 0x20000000, LENGTH = 256k
     SCRATCH_X(rwx)      : ORIGIN = 0x20040000, LENGTH = 4k
     SCRATCH_Y(rwx)      : ORIGIN = 0x20041000, LENGTH = 4k

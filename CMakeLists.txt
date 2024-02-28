@@ -143,6 +143,10 @@ picowota_retrieve_variable(PICOWOTA_CYW43_SIZE false "240") # in KiB
 picowota_retrieve_variable(PICOWOTA_BOOTLOADER_SIZE false "120") # in KiB
 picowota_retrieve_variable(PICOWOTA_APP_STORE_SIZE false "0") # in KiB
 
+# HACK: default to 8 KiB in all cases. ideally we'd want 0 if no BT, but right
+# now `picowota_retrieve_variable` behaves badly when defaults change.
+picowota_retrieve_variable(PICOWOTA_BT_STORE_SIZE false "8") # in KiB (for consistency)
+
 # If any transport requires WiFi, add it here.
 if(PICOWOTA_TCP)
 	set(PICOWOTA_WIFI 1)
@@ -181,8 +185,12 @@ endfunction()
 assert_4k_aligned("PICOWOTA_CYW43_SIZE")
 assert_4k_aligned("PICOWOTA_BOOTLOADER_SIZE")
 assert_4k_aligned("PICOWOTA_APP_STORE_SIZE")
+assert_4k_aligned("PICOWOTA_BT_STORE_SIZE")
 
-target_compile_definitions(picowota PUBLIC PICOWOTA_BLUETOOTH=${PICOWOTA_BLUETOOTH})
+# `picowota` will pick up `picowota_client`'s INTERFACE definitions
+target_compile_definitions(picowota_client INTERFACE PICOWOTA_BLUETOOTH=${PICOWOTA_BLUETOOTH})
+
+# `picowota_client` doesn't need to know about the rest of these
 target_compile_definitions(picowota PUBLIC PICOWOTA_BT_SPP=${PICOWOTA_BT_SPP})
 target_compile_definitions(picowota PUBLIC PICOWOTA_IDLE_TIMEOUT_SEC=${PICOWOTA_IDLE_TIMEOUT_SEC})
 target_compile_definitions(picowota PUBLIC PICOWOTA_TCP=${PICOWOTA_TCP})
@@ -193,6 +201,7 @@ function(picowota_set_linker_defs NAME)
 	target_link_options(${NAME} PUBLIC "LINKER:--defsym=cyw43_len=${PICOWOTA_CYW43_SIZE}k")
 	target_link_options(${NAME} PUBLIC "LINKER:--defsym=bootloader_len=${PICOWOTA_BOOTLOADER_SIZE}k")
 	target_link_options(${NAME} PUBLIC "LINKER:--defsym=app_store_len=${PICOWOTA_APP_STORE_SIZE}k")
+	target_link_options(${NAME} PUBLIC "LINKER:--defsym=bt_store_len=${PICOWOTA_BT_STORE_SIZE}k")
 endfunction()
 
 picowota_set_linker_defs(picowota)
@@ -230,6 +239,22 @@ if(PICOWOTA_BLUETOOTH_LE)
 	target_link_libraries(picowota pico_btstack_cyw43 pico_btstack_le)
 endif()
 
+if(PICOWOTA_BLUETOOTH)
+	# flash offset
+	math(EXPR PICOWOTA_BT_STORE_OFFSET "(2048 - ${PICOWOTA_BT_STORE_SIZE}) * 1024")
+	math(EXPR PICOWOTA_BT_STORE_SIZE_BYTES "${PICOWOTA_BT_STORE_SIZE} * 1024")
+
+	target_compile_definitions(pico_btstack_flash_bank INTERFACE
+		PICO_FLASH_BANK_STORAGE_OFFSET=${PICOWOTA_BT_STORE_OFFSET}
+		PICO_FLASH_BANK_TOTAL_SIZE=${PICOWOTA_BT_STORE_SIZE_BYTES})
+
+	target_link_libraries(picowota_client INTERFACE
+		pico_btstack_flash_bank)
+	target_compile_definitions(picowota_client INTERFACE
+		PICOWOTA_FLASH_BANK_STORAGE_OFFSET=${PICOWOTA_BT_STORE_OFFSET}
+		PICOWOTA_FLASH_BANK_TOTAL_SIZE=${PICOWOTA_BT_STORE_SIZE_BYTES})
+endif()
+
 function(picowota_app_store_declare NAME)
 	math(EXPR in_bytes "${PICOWOTA_APP_STORE_SIZE} * 1024" OUTPUT_FORMAT HEXADECIMAL)
 	target_compile_definitions(${NAME} PUBLIC PICOWOTA_APP_STORE_SIZE=${in_bytes})
@@ -239,6 +264,7 @@ function(picowota_build_no_bootloader_with_app_store NAME)
 	get_target_property(PICOWOTA_SRC_DIR picowota SOURCE_DIR)
 	pico_set_linker_script(${NAME} ${PICOWOTA_SRC_DIR}/memmap_default_with_app_store.ld)
 	target_link_options(${NAME} PUBLIC "LINKER:--defsym=app_store_len=${PICOWOTA_APP_STORE_SIZE}k")
+	target_link_options(${NAME} PUBLIC "LINKER:--defsym=bt_store_len=${PICOWOTA_BT_STORE_SIZE}k")
 	picowota_app_store_declare(${NAME})
 endfunction()
 
@@ -283,7 +309,7 @@ function(picowota_build_combined NAME)
 	add_custom_target(${NAME}_hdr DEPENDS ${NAME})
 
 	# default entry point is the beginning of the app image
-	# i.e. bootloader + CYW43 + app header + app storage
+	# i.e. bootloader + CYW43 + app header
 	math(EXPR header_vtor "0x10000000 + (${PICOWOTA_BOOTLOADER_SIZE} + ${PICOWOTA_CYW43_SIZE} + 4) * 1024" OUTPUT_FORMAT HEXADECIMAL)
 	message("${NAME} hdr vtor ${header_vtor}")
 	add_custom_command(TARGET ${NAME}_hdr DEPENDS ${APP_BIN}

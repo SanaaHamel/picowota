@@ -28,7 +28,8 @@
                 CYW43 firmware
                 app header
                 app image
-                app storage (may be 0 sized)
+                app store (may be 0 sized)
+                bt shared store (matches default layout by pico sdk)
     0x20000000  RAM
 */
 
@@ -38,18 +39,23 @@
  * There must be a better way to determine the size dynamically somehow.
  * NOTE: Current BT-enabled CYW43 firmware is ~236k. Reserve ~240k for now.
  */
+flash_len           = 2048k;
 app_header_len      = 4k;
 cyw43_offset        = bootloader_len;
 app_header_offset   = cyw43_offset      + cyw43_len;
 app_image_offset    = app_header_offset + app_header_len;
-app_store_offset    = 2048k             - app_store_len;
+app_image_len       = flash_len - app_image_offset - app_store_len - bt_store_len;
+app_store_offset    = app_image_offset  + app_image_len;
+bt_store_offset     = app_store_offset  + bt_store_len;
 
 MEMORY
 {
     FLASH(rx)           : ORIGIN = 0x10000000                       , LENGTH = bootloader_len
     FLASH_CYW43(r)      : ORIGIN = 0x10000000 + cyw43_offset        , LENGTH = cyw43_len
     FLASH_APP_HEADER(rx): ORIGIN = 0x10000000 + app_header_offset   , LENGTH = app_header_len
-    FLASH_APP_IMAGE(rx) : ORIGIN = 0x10000000 + app_image_offset    , LENGTH = 2048k - app_image_offset
+    /* subsume the app store into app image for the purposes of write checks */
+    FLASH_APP_IMAGE(rx) : ORIGIN = 0x10000000 + app_image_offset    , LENGTH = app_image_len + app_store_len
+    FLASH_BT_STORE(rw)  : ORIGIN = 0x10000000 + bt_store_offset     , LENGTH = bt_store_len
     RAM(rwx)            : ORIGIN = 0x20000000, LENGTH = 256k
     SCRATCH_X(rwx)      : ORIGIN = 0x20040000, LENGTH = 4k
     SCRATCH_Y(rwx)      : ORIGIN = 0x20041000, LENGTH = 4k
