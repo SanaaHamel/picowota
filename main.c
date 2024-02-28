@@ -797,7 +797,11 @@ static void pump_events() {
 		};
 	}
 
-	cyw43_arch_gpio_put(0, 0 < stream_comm_active());
+	uint64_t time_ms = time_us_64() / 1000;
+	uint64_t time_blink = time_ms / 100;
+	bool blinker = time_blink % 2 == 0;
+
+	cyw43_arch_gpio_put(0, 0 < stream_comm_active() || blinker);
 	reboot_if_idle_timeout();
 }
 
