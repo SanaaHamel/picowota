@@ -1,0 +1,11 @@
+format:
+  dangle_parens: true
+  line_width: 120
+  tab_size: 2
+  use_tabchars: false
+  always_wrap: [
+    "add_executable",
+  ]
+
+markup:
+  enable_markup: false
