@@ -293,12 +293,14 @@ endfunction()
 # 3. Calculate the checksum of the app binary
 # 4. Update the header and binary sections in the ELF from 1.
 function(picowota_build_combined NAME)
-  set(APP_BIN_NAME
-      $<IF:$<BOOL:$<TARGET_PROPERTY:${NAME},OUTPUT_NAME>>,$<TARGET_PROPERTY:${NAME},OUTPUT_NAME>,$<TARGET_PROPERTY:${NAME},NAME>>_without-cyw43-firmware-section.bin
+  set(APP_OUTPUT_NAME
+      $<IF:$<BOOL:$<TARGET_PROPERTY:${NAME},OUTPUT_NAME>>,$<TARGET_PROPERTY:${NAME},OUTPUT_NAME>,$<TARGET_PROPERTY:${NAME},NAME>>
   )
+  set(APP_BIN_NAME ${APP_OUTPUT_NAME}_without-cyw43-firmware-section.bin)
   set(APP_BIN ${CMAKE_CURRENT_BINARY_DIR}/${APP_BIN_NAME})
-  set(APP_HDR_BIN ${CMAKE_CURRENT_BINARY_DIR}/${NAME}_hdr.bin)
+  set(APP_HDR_BIN ${CMAKE_CURRENT_BINARY_DIR}/${APP_OUTPUT_NAME}_hdr.bin)
   set(COMBINED picowota_${NAME})
+  set(COMBINED_OUTPUT picowota_${APP_OUTPUT_NAME})
   get_target_property(PICOWOTA_SRC_DIR picowota SOURCE_DIR)
   get_target_property(PICOWOTA_BIN_DIR picowota BINARY_DIR)
 
@@ -335,13 +337,12 @@ function(picowota_build_combined NAME)
     TARGET ${COMBINED}
     DEPENDS ${APP_HDR_BIN} ${APP_BIN}
     COMMAND ${CMAKE_OBJCOPY} --update-section .app_hdr=${APP_HDR_BIN} --update-section .app_bin=${APP_BIN}
-            ${PICOWOTA_BIN_DIR}/picowota.elf ${COMBINED}.elf
+            ${PICOWOTA_BIN_DIR}/picowota.elf ${COMBINED_OUTPUT}.elf
   )
-
   add_custom_command(
     TARGET ${COMBINED}
     POST_BUILD
-    COMMAND ${CMAKE_OBJCOPY} -Obinary ${COMBINED}.elf ${COMBINED}.bin
+    COMMAND ${CMAKE_OBJCOPY} -Obinary ${COMBINED_OUTPUT}.elf ${COMBINED_OUTPUT}.bin
   )
 
   if(NOT ELF2UF2_FOUND)
@@ -353,7 +354,7 @@ function(picowota_build_combined NAME)
     add_custom_command(
       TARGET ${COMBINED}
       POST_BUILD
-      COMMAND ELF2UF2 ${COMBINED}.elf ${COMBINED}.uf2
+      COMMAND ELF2UF2 ${COMBINED_OUTPUT}.elf ${COMBINED_OUTPUT}.uf2
     )
   endif()
 endfunction()
