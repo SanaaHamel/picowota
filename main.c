@@ -79,6 +79,11 @@ const char *wifi_pass = STR(PICOWOTA_WIFI_PASS);
 #endif
 
 static critical_section_t critical_section;
+static absolute_time_t g_idle_timeout;
+
+static bool idle_reboot_enabled() {
+	return memcmp(&g_idle_timeout, &at_the_end_of_time, sizeof(at_the_end_of_time)) != 0;
+}
 
 #define EVENT_QUEUE_LENGTH 8
 static queue_t event_queue;
@@ -291,7 +296,7 @@ static uint32_t size_erase_write_ex(uint32_t const write_min, uint32_t const wri
 	return STREAM_COMM_RSP_OK;
 }
 
-static uint32_t handle_erase_write_ex(uint32_t const write_min, uint32_t const write_max, uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
+static uint32_t handle_erase_write_ex(uint32_t const write_min, uint32_t const write_max, uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out, bool disable_reboot_if_changed)
 {
 	uint32_t const addr = args_in[0];
 	uint32_t const size = args_in[1];
@@ -321,6 +326,11 @@ static uint32_t handle_erase_write_ex(uint32_t const write_min, uint32_t const w
 		}
 
 		if (changed) {
+			if (disable_reboot_if_changed && idle_reboot_enabled()) {
+				DBG_PRINTF("changing bootloader - idle reboot suppressed\n");
+				g_idle_timeout = at_the_end_of_time;
+			}
+
 			flash_range_erase(addr - XIP_BASE, size);
 			flash_range_program(addr - XIP_BASE, data_in, size);
 		} else {
@@ -342,7 +352,7 @@ static uint32_t size_erase_write(uint32_t const* const args_in, uint32_t* const 
 
 static uint32_t handle_erase_write(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
-	return handle_erase_write_ex(WRITE_ADDR_MIN, FLASH_ADDR_MAX, args_in, data_in, resp_args_out, resp_data_out);
+	return handle_erase_write_ex(WRITE_ADDR_MIN, FLASH_ADDR_MAX, args_in, data_in, resp_args_out, resp_data_out, false);
 }
 
 struct comm_command erase_write_cmd = {
@@ -363,7 +373,7 @@ static uint32_t size_erase_write_boot(uint32_t const* const args_in, uint32_t* c
 
 static uint32_t handle_erase_write_boot(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
-	return handle_erase_write_ex(BOOT_WRITE_ADDR_MIN, BOOT_WRITE_ADDR_MAX, args_in, data_in, resp_args_out, resp_data_out);
+	return handle_erase_write_ex(BOOT_WRITE_ADDR_MIN, BOOT_WRITE_ADDR_MAX, args_in, data_in, resp_args_out, resp_data_out, true);
 }
 
 struct comm_command erase_write_boot_cmd = {
@@ -376,7 +386,7 @@ struct comm_command erase_write_boot_cmd = {
 	.handle = &handle_erase_write_boot,
 };
 
-static uint32_t handle_erase_ex(uint32_t const write_min, uint32_t const write_max, uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
+static uint32_t handle_erase_ex(uint32_t const write_min, uint32_t const write_max, uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out, bool disable_reboot_if_changed)
 {
 	uint32_t const addr = args_in[0];
 	uint32_t const size = args_in[1];
@@ -395,7 +405,13 @@ static uint32_t handle_erase_ex(uint32_t const write_min, uint32_t const write_m
 	}
 
 	critical_section_enter_blocking(&critical_section);
-	flash_range_erase(addr - XIP_BASE, size);
+	{
+		if (disable_reboot_if_changed && idle_reboot_enabled()) {
+			DBG_PRINTF("changing bootloader - idle reboot suppressed\n");
+			g_idle_timeout = at_the_end_of_time;
+		}
+		flash_range_erase(addr - XIP_BASE, size);
+	}
 	critical_section_exit(&critical_section);
 
 	return STREAM_COMM_RSP_OK;
@@ -403,7 +419,7 @@ static uint32_t handle_erase_ex(uint32_t const write_min, uint32_t const write_m
 
 static uint32_t handle_erase_boot(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
-	return handle_erase_ex(BOOT_WRITE_ADDR_MIN, BOOT_WRITE_ADDR_MAX, args_in, data_in, resp_args_out, resp_data_out);
+	return handle_erase_ex(BOOT_WRITE_ADDR_MIN, BOOT_WRITE_ADDR_MAX, args_in, data_in, resp_args_out, resp_data_out, true);
 }
 
 struct comm_command erase_boot_cmd = {
@@ -418,7 +434,7 @@ struct comm_command erase_boot_cmd = {
 
 static uint32_t handle_erase(uint32_t const* const args_in, uint8_t const* const data_in, uint32_t* const resp_args_out, uint8_t* const resp_data_out)
 {
-	return handle_erase_ex(ERASE_ADDR_MIN, FLASH_ADDR_MAX, args_in, data_in, resp_args_out, resp_data_out);
+	return handle_erase_ex(ERASE_ADDR_MIN, FLASH_ADDR_MAX, args_in, data_in, resp_args_out, resp_data_out, false);
 }
 
 struct comm_command erase_cmd = {
@@ -733,10 +749,8 @@ static void network_deinit()
 	cyw43_arch_deinit();
 }
 
-static absolute_time_t g_idle_timeout;
-
 static void reboot_if_idle_timeout() {
-	if (0 < stream_comm_active()) {
+	if (0 < stream_comm_active() && idle_reboot_enabled()) {
 		g_idle_timeout = make_timeout_time_ms(PICOWOTA_IDLE_TIMEOUT_SEC * 1000);
 		return;
 	}
