@@ -12,8 +12,14 @@ extern "C" {
 #endif
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #define PICOWOTA_BOOTLOADER_ENTRY_MAGIC 0xb105f00d
+
+// Exactly like the SDK's `watchdog_enable`, but reboots into the bootloader.
+// FIXME: `watchdog_enable_caused_reboot` will not report true within application
+//        after an idle timeout from the bootloader.
+void picowota_watchdog_enable_bootloader(uint32_t delay_ms, bool pause_on_debug);
 
 __attribute__((noreturn)) void picowota_reboot(bool to_bootloader);
 
