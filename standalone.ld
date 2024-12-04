@@ -30,6 +30,11 @@ app_image_len       = flash_len - app_image_offset - app_store_len - bt_store_le
 app_store_offset    = app_image_offset  + app_image_len;
 bt_store_offset     = app_store_offset  + bt_store_len;
 
+ASSERT(cyw43_len        % 4096 == 0, "`cyw43_len` is not 4 KiB aligned")
+ASSERT(bootloader_len   % 4096 == 0, "`bootloader_len` is not 4 KiB aligned")
+ASSERT(app_store_len    % 4096 == 0, "`app_store_len` is not 4 KiB aligned")
+ASSERT(bt_store_len     % 4096 == 0, "`bt_store_len` is not 4 KiB aligned")
+
 MEMORY
 {
     FLASH_CYW43(r)      : ORIGIN = 0x10000000 + cyw43_offset        , LENGTH = cyw43_len

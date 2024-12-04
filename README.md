@@ -43,10 +43,11 @@ Then modifiy your project's CMakeLists.txt to include the `picowota` directory:
 
 ```
 add_subdirectory(picowota)
+add_picowota(my_picowota)
 ```
 
-You can either provide the following as environment variables, or set them
-as CMake variables:
+You can either provide the following as either global properties, or set them
+as target properties on your picowota target:
 
 ```
 PICOWOTA_WIFI_SSID # The WiFi network SSID
@@ -68,8 +69,8 @@ which contains the bootloader and the app (suitable for flashing the first
 time):
 
 ```
-picowota_build_standalone(my_executable_name)
-picowota_build_combined(my_executable_name)
+picowota_build_standalone(my_picowota my_executable_name)
+picowota_build_combined(my_picowota my_executable_name)
 ```
 
 Note: The combined target will also build the standalone binary.
@@ -81,7 +82,7 @@ time, then `picowota` will stay in bootloader mode, ready to receive new app cod
 
 You can also return to the bootloader from your app code - for example when a
 button is pressed, or in response to some network request. The
-`picowota_client` library provides a `picowota_reboot(bool to_bootloader)`
+`my_picowota_client` library provides a `picowota_reboot(bool to_bootloader)`
 function, which your app can call to get back in to the bootloader.
 
 ```

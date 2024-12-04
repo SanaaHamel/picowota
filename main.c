@@ -36,6 +36,20 @@
 
 #include "picowota/reboot.h"
 
+static_assert(0 <= PICOWOTA_IDLE_TIMEOUT_SEC);
+
+#if PICOWOTA_BT_SPP
+	#define PICOWOTA_BLUETOOTH 1
+#else
+	#define PICOWOTA_BLUETOOTH 0
+#endif
+
+#if PICOWOTA_TCP
+	#define PICOWOTA_WIFI 1
+#else
+	#define PICOWOTA_WIFI 0
+#endif
+
 #if PICOWOTA_BLUETOOTH
 #include "btstack_run_loop.h"
 #endif
@@ -66,13 +80,13 @@ static dhcp_server_t dhcp_server;
 
 #if PICOWOTA_WIFI
 #ifndef PICOWOTA_WIFI_SSID
-#warning "PICOWOTA_WIFI_SSID not defined"
+#error "PICOWOTA_WIFI_SSID not defined"
 #else
 const char *wifi_ssid = STR(PICOWOTA_WIFI_SSID);
 #endif
 
 #ifndef PICOWOTA_WIFI_PASS
-#warning "PICOWOTA_WIFI_PASS not defined"
+#error "PICOWOTA_WIFI_PASS not defined"
 #else
 const char *wifi_pass = STR(PICOWOTA_WIFI_PASS);
 #endif

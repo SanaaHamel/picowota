@@ -38,7 +38,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument("ifile", help="Input application binary (binary)")
 parser.add_argument("ofile", help="Output header file (binary)")
 parser.add_argument("-a", "--addr", help="Load address of the application image",
-                    type=any_int, default=0x10004000)
+                    type=any_int, default=None)
+parser.add_argument("--addr-base", help="Base address of the flash region",
+                    type=any_int, default=0x10000000)
+parser.add_argument("--boot-size", help="Size of bootloader section (KiB)",
+                    type=any_int, default=None)
+parser.add_argument("--cyw43-size", help="Size of CYW43 firmware section (KiB) (KiB) (KiB)",
+                    type=any_int, default=None)
 args = parser.parse_args()
 
 try:
@@ -46,7 +52,16 @@ try:
 except:
     sys.exit("Could not open input file '{}'".format(args.ifile))
 
-vtor = args.addr
+
+if args.addr is None:
+    if args.boot_size is None:
+        sys.exit("neither `--addr` nor `--boot-size` specified")
+    if args.cyw43_size is None:
+        sys.exit("neither `--addr` nor `--cyw43-size` specified")
+    vtor = args.addr_base + (args.boot_size + args.cyw43_size + 4) * 1024
+else:
+    vtor = args.addr
+
 size = len(idata)
 crc = binascii.crc32(idata)
 
