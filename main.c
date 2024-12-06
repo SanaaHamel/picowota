@@ -28,10 +28,10 @@
 
 #include "pico/stdlib.h"
 #include "pico/time.h"
-#include "pico/cyw43_arch.h"
 
-#include "comm_bt_spp.h"
 #include "comm_stream.h"
+#include "comm_bt_spp.h"
+#include "comm_usb_cdc.h"
 #include "comm_tcp.h"
 
 #include "picowota/reboot.h"
@@ -54,16 +54,37 @@ static_assert(0 <= PICOWOTA_IDLE_TIMEOUT_SEC);
 #include "btstack_run_loop.h"
 #endif
 
+#define PICWOTA_WIRELESS (PICOWOTA_BLUETOOTH || PICOWOTA_WIFI)
+
+#if PICOWOTA_WIRELESS || defined(CYW43_WL_GPIO_LED_PIN)
+	#define PICWOTA_CYW43 1
+	#include "pico/cyw43_arch.h"
+#else
+	#define PICWOTA_CYW43 0
+#endif
+
+#if PICOWOTA_USB_CDC
+	#include "tusb.h"
+	#include "stdio_usb.h"
+#endif
+
 static_assert(sizeof(uint32_t) < sizeof(uint64_t), "need to fix overflow checks");
 
 #ifndef PICOWOTA_ENABLE_READ
 #define PICOWOTA_ENABLE_READ 0
 #endif
 
+
+static void stdio_usb_init_maybe() {
+#if PICOWOTA_USB_CDC
+	stdio_usb_init();
+#endif
+}
+
 #ifndef NDEBUG
 #include <stdio.h>
 #include "pico/stdio.h"
-#define DBG_PRINTF_INIT() stdio_init_all()
+#define DBG_PRINTF_INIT() do { stdio_init_all(); stdio_usb_init_maybe(); } while (0)
 #define DBG_PRINTF(...) printf(__VA_ARGS__)
 #else
 #define DBG_PRINTF_INIT() { }
@@ -757,10 +778,15 @@ static void network_deinit()
 #if PICOWOTA_TCP
 	tcp_comm_server_close(g_tcp_server);
 #endif
+#if PICOWOTA_USB_CDC
+	usb_cdc_comm_close();
+#endif
 #if PICOWOTA_WIFI_AP
 	dhcp_server_deinit(&dhcp_server);
 #endif
+#if PICWOTA_CYW43
 	cyw43_arch_deinit();
+#endif
 }
 
 static void reboot_if_idle_timeout() {
@@ -825,11 +851,28 @@ static void pump_events() {
 		};
 	}
 
+#if PICOWOTA_USB_CDC
+	tud_task();
+	usb_cdc_update();
+#endif
+
 	uint64_t time_ms = time_us_64() / 1000;
 	uint64_t time_blink = time_ms / 100;
 	bool blinker = time_blink % 2 == 0;
+	bool led_on = 0 < stream_comm_active() || blinker;
 
-	cyw43_arch_gpio_put(0, 0 < stream_comm_active() || blinker);
+#if defined(PICO_DEFAULT_LED_PIN)
+	gpio_put(PICO_DEFAULT_LED_PIN, led_on);
+#elif defined(PICO_DEFAULT_WS2812_PIN)
+	// FUTURE WORK: implement WS2812 LED
+#elif defined(CYW43_WL_GPIO_LED_PIN)
+	// HACK:  `cyw43_arch_gpio_put` w/o having the HCI powered on
+	//        kills the timer task when it enters `cyw43_ensure_up`.
+	//        Root cause unknown. This hack should be benign since
+	//        Pico W is typically built w/ BT enabled.
+	cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, led_on);
+#endif
+
 	reboot_if_idle_timeout();
 }
 
@@ -850,6 +893,11 @@ int main()
 
 	sleep_ms(10);
 #endif
+
+#if PICOWOTA_USB_CDC
+	tusb_init();
+#endif
+
 	DBG_PRINTF_INIT();
 
 	struct image_header *hdr = (struct image_header *)PICOWOTA_APP_HEADER;
@@ -862,10 +910,12 @@ int main()
 
 	queue_init(&event_queue, sizeof(struct event), EVENT_QUEUE_LENGTH);
 
+#if PICWOTA_CYW43
 	if (cyw43_arch_init()) {
 		DBG_PRINTF("failed to initialise\n");
 		return 1;
 	}
+#endif
 
 	critical_section_init(&critical_section);
 
@@ -888,9 +938,18 @@ int main()
 	};
 
 #if PICOWOTA_BT_SPP
-	int ssp_err = bt_spp_comm_init(cmds, sizeof(cmds) / sizeof(cmds[0]), CMD_SYNC);
-	if (ssp_err) {
-		DBG_PRINTF("failed to init SPP err=%d\n", ssp_err);
+	int bt_spp_err = bt_spp_comm_init(cmds, sizeof(cmds) / sizeof(cmds[0]), CMD_SYNC);
+	if (bt_spp_err) {
+		DBG_PRINTF("failed to init SPP err=%d\n", bt_spp_err);
+	}
+#endif
+
+#if PICOWOTA_USB_CDC
+	int usb_cdc_err = usb_cdc_comm_init(cmds, sizeof(cmds) / sizeof(cmds[0]), CMD_SYNC);
+	if (usb_cdc_err) {
+		DBG_PRINTF("failed to init USB CDC err=%d\n", usb_cdc_err);
+	} else {
+		DBG_PRINTF("USB CDC comm ready\n");
 	}
 #endif
 
@@ -939,7 +998,9 @@ int main()
 #else
 	for ( ; ; ) {
 		pump_events();
+#if PICWOTA_CYW43
 		cyw43_arch_poll();
+#endif
 		sleep_ms(5);
 	}
 #endif

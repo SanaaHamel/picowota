@@ -60,6 +60,7 @@ picowota_property(PICOWOTA_WIFI_AP "Host WiFi AP")
 picowota_property(PICOWOTA_OTA_PIN "Bootloader trigger GPIO")
 picowota_property(PICOWOTA_BT_SPP "Enable BT SPP comms" false)
 picowota_property(PICOWOTA_TCP "Enable TCP comms" false)
+picowota_property(PICOWOTA_USB_CDC "Enable USB CDC comms" false)
 picowota_property(PICOWOTA_CYW43_SIZE "CYW43 firmware section size (KiB)" 240)
 picowota_property(PICOWOTA_BOOTLOADER_SIZE "Bootloader firmware section size (KiB)" 120)
 picowota_property(PICOWOTA_APP_STORE_SIZE "Application storage section size (KiB)" 0)
@@ -133,16 +134,23 @@ function(add_picowota name)
     hardware_flash
     hardware_resets
     hardware_structs
-    # app might be using the bluetooth firmware even if we aren't
-    pico_btstack_hci_transport_cyw43
-    pico_cyw43_arch_poll
     pico_stdlib
     pico_sync
     pico_time
     pico_util
-    $<$<BOOL:$<TARGET_PROPERTY:PICOWOTA_BT_SPP>>:pico_btstack_cyw43 pico_btstack_classic>
+    $<$<BOOL:$<TARGET_PROPERTY:PICOWOTA_BT_SPP>>:pico_btstack_classic>
     $<$<BOOL:$<TARGET_PROPERTY:PICOWOTA_TCP>>:pico_cyw43_arch_lwip_poll>
+    $<$<BOOL:$<TARGET_PROPERTY:PICOWOTA_USB_CDC>>:pico_unique_id tinyusb_device>
   )
+
+  if("${PICO_BOARD}" STREQUAL "pico_w")
+    target_link_libraries("${name}"
+      # app might be using the bluetooth firmware even if we aren't
+      pico_btstack_cyw43
+      pico_cyw43_arch_poll
+      pico_cyw43_driver
+    )
+  endif()
 
   target_compile_def_prop("${name}" PUBLIC PICOWOTA_OTA_PIN)
 
@@ -150,6 +158,7 @@ function(add_picowota name)
     "PICOWOTA_IDLE_TIMEOUT_SEC=$<TARGET_PROPERTY:PICOWOTA_IDLE_TIMEOUT_SEC>"
     "PICOWOTA_BT_SPP=$<BOOL:$<TARGET_PROPERTY:PICOWOTA_BT_SPP>>"
     "PICOWOTA_TCP=$<BOOL:$<TARGET_PROPERTY:PICOWOTA_TCP>>"
+    "PICOWOTA_USB_CDC=$<BOOL:$<TARGET_PROPERTY:PICOWOTA_USB_CDC>>"
     "PICOWOTA_WIFI_AP=$<BOOL:$<TARGET_PROPERTY:PICOWOTA_WIFI_AP>>"
     "PICOWOTA_WIFI_SSID=$<TARGET_PROPERTY:PICOWOTA_WIFI_SSID>"
     "PICOWOTA_WIFI_PASS=$<TARGET_PROPERTY:PICOWOTA_WIFI_PASS>"
@@ -162,7 +171,6 @@ function(add_picowota name)
   pico_set_linker_script("${name}" "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/bootloader_shell.ld")
   pico_set_binary_type("${name}" copy_to_ram)
   pico_add_extra_outputs("${name}")
-  # pico_enable_stdio_usb("${name}" 1)
   pico_enable_stdio_uart("${name}" 1)
 endfunction()
 
@@ -175,7 +183,7 @@ function(picowota_share_cyw43_firmware target)
   )
 endfunction()
 
-function(picowota_set_linker_defs picowota target)
+function(picowota_set_linker_defs target picowota)
   function(target_link_opt_4k linker_name prop)
     target_link_options("${target}" PUBLIC
       "LINKER:--defsym=${linker_name}=$<TARGET_PROPERTY:${picowota},${prop}>k")
@@ -187,23 +195,23 @@ function(picowota_set_linker_defs picowota target)
   target_link_opt_4k("bt_store_len" "PICOWOTA_BT_STORE_SIZE")
 endfunction()
 
-function(picowota_app_store_declare picowota target)
+function(picowota_app_store_declare target picowota)
   target_compile_definitions("${target}" PUBLIC "PICOWOTA_APP_STORE_SIZE=($<TARGET_PROPERTY:${picowota},PICOWOTA_APP_STORE_SIZE> * 1024)")
 endfunction()
 
-function(picowota_build_no_bootloader_with_app_store picowota target)
+function(picowota_build_no_bootloader_with_app_store target picowota)
   pico_set_linker_script("${target}" "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/memmap_default_with_app_store.ld")
   target_link_options("${target}" PUBLIC
     "LINKER:--defsym=app_store_len=$<TARGET_PROPERTY:${picowota},PICOWOTA_APP_STORE_SIZE>k"
     "LINKER:--defsym=bt_store_len=$<TARGET_PROPERTY:${picowota},PICOWOTA_BT_STORE_SIZE>k"
   )
-  picowota_app_store_declare("${picowota}" "${target}")
+  picowota_app_store_declare("${target}" "${picowota}")
 endfunction()
 
-function(picowota_build_standalone picowota target)
+function(picowota_build_standalone target picowota)
   picowota_share_cyw43_firmware("${target}")
-  picowota_app_store_declare("${picowota}" "${target}")
-  picowota_set_linker_defs("${picowota}" "${target}")
+  picowota_app_store_declare("${target}" "${picowota}")
+  picowota_set_linker_defs("${target}" "${picowota}")
   pico_set_linker_script("${target}" "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/standalone.ld")
 endfunction()
 
@@ -216,7 +224,7 @@ endfunction()
 # address properly and skip boot2.
 # 3. Calculate the checksum of the app binary
 # 4. Update the header and binary sections in the ELF from 1.
-function(picowota_build_combined picowota target)
+function(picowota_build_combined target picowota)
   set(wota_output_name $<IF:$<STREQUAL:$<TARGET_PROPERTY:${picowota},OUTPUT_NAME>,>,$<TARGET_PROPERTY:${picowota},NAME>,$<TARGET_PROPERTY:${picowota},OUTPUT_NAME>>)
   set(app_output_name  $<IF:$<STREQUAL:$<TARGET_PROPERTY:${target},OUTPUT_NAME>,>,$<TARGET_PROPERTY:${target},NAME>,$<TARGET_PROPERTY:${target},OUTPUT_NAME>>)
   set(app_bin_name    "${app_output_name}_without-cyw43-firmware-section.bin")
@@ -237,7 +245,7 @@ function(picowota_build_combined picowota target)
   )
 
   # The app must be built with the correct linker script (and a .bin)
-  picowota_build_standalone("${picowota}" "${target}")
+  picowota_build_standalone("${target}" "${picowota}")
 
   add_custom_target("${target}_hdr" DEPENDS "${target}")
 
